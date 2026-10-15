@@ -1,0 +1,197 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>BuildWatch — Elmina Green 4</title>
+<style>:root{color-scheme:light;--bg:#fff8f1;--card:#fff;--line:#ffe0c9;--tx:#1f2937;--mu:#6b7280;--br:#ff6b00;--g:#12b76a;--y:#f7c500;--o:#ff7a1a;--r:#e5213a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:3;background:#fff;padding:12px 16px;border-bottom:1px solid var(--line);box-shadow:0 4px 14px #ff6b0014}
+header .sm{color:var(--br);font-weight:700}h1{font-size:19px;margin:0}h2{font-size:15px;margin:0 0 12px}.sm{font-size:12px;color:var(--mu)}
+.hr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}.hr .seg{width:100%}.seg button{flex:1}
+.badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:99px;background:#fff}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--g);animation:p 1.6s infinite}
+@keyframes p{0%{box-shadow:0 0 0 0 #12b76a99}100%{box-shadow:0 0 0 9px #12b76a00}}
+@media(prefers-reduced-motion:reduce){.dot{animation:none}}
+.seg{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff4ea}
+button{font:inherit;color:var(--mu);background:transparent;border:0;padding:10px 12px;cursor:pointer}button:focus-visible{outline:2px solid var(--br);outline-offset:-2px}
+.seg button.on{background:var(--br);color:#fff;font-weight:600}#sim{background:var(--br);color:#fff;border-radius:99px;padding:6px 13px;font-size:12px;font-weight:600}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:4;display:flex;gap:4px;background:#fff;border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))}
+.tabs button{flex:1;border-radius:12px;font-size:13px}.tabs button.on{background:#fff1e6;color:var(--br);font-weight:700}
+main{padding:14px 14px 96px;max-width:520px;margin:auto}.sec{display:none;gap:14px;grid-template-columns:minmax(0,1fr)}.sec.on{display:grid}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;min-width:0;box-shadow:0 6px 18px #ff6b0012}
+.gauge svg{width:100%;max-width:280px}.scale div{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:10px;color:var(--mu);font-size:13px}.scale .on{background:#fff1e6;color:var(--tx)}
+.scale i{width:12px;height:12px;border-radius:3px;flex:none}.scale b{margin-right:6px;color:var(--tx)}
+.note{margin:12px 0 0;padding:10px 12px;border-left:4px solid var(--c);background:#fff4ea;border-radius:8px;font-size:13px}
+.bar{display:flex;height:22px;border-radius:8px;overflow:hidden;background:#ffefe3;margin:8px 0}
+.hrs{display:none;gap:6px;overflow-x:auto;margin:10px 0 0;padding-bottom:4px}.hrs button{flex:none;border:1px solid var(--line);border-radius:12px;padding:6px 10px;background:#fff;color:var(--tx);text-align:center;font-size:12px;line-height:1.35}.hrs button.on{background:var(--br);border-color:var(--br);color:#fff}.hrs b{display:block;font-size:13px}#pin{background:#fff1e6;color:var(--br);border:1px solid var(--br);border-radius:99px;padding:8px 14px;font-weight:600;font-size:13px}#pin.act{background:var(--br);color:#fff}.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:8px 10px}.my{text-align:right;margin-left:auto}.my select{font:inherit;font-size:13px;max-width:150px;padding:7px 6px;border:1px solid var(--br);border-radius:10px;background:#fff1e6;color:var(--tx)}.hs{display:flex;justify-content:flex-end;align-items:center;gap:6px}.my .seg button{padding:7px 12px;flex:none}.my input{font:inherit;font-size:14px;width:54px;padding:7px 6px;border:1px solid var(--br);border-radius:10px;background:#fff1e6;text-align:center}#hmsg{margin-top:3px;max-width:170px;word-break:break-word}html,body{max-width:100%;overflow-x:hidden}h1{font-size:18px}.gauge{text-align:center}.gauge svg{display:block;margin:0 auto}.kv{align-items:flex-start}.kv span{flex:1;min-width:0}.kv b{flex:none;max-width:48%;text-align:right}.hr .seg button{font-size:14px;padding:10px 6px}#mseg{width:100%}.my select,.my input{font-size:16px}.my select{max-width:112px}.my input{width:50px}.sw{display:inline-block;width:14px;height:14px;border-radius:4px;margin-right:8px;vertical-align:-2px}.kv{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.mini div{background:#fff4ea;border-radius:12px;padding:10px;font-size:12px;color:var(--mu)}.mini b{display:block;font-size:19px;color:var(--tx)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right}th{color:var(--mu);font-weight:500}td:first-child,th:first-child{text-align:left}
+.row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center}.row h2{margin:0}
+canvas{width:100%;height:auto;display:block;border-radius:14px;background:#fff;margin-top:10px;touch-action:none;cursor:grab}
+.gbar{height:12px;border-radius:99px;margin-top:10px;background:linear-gradient(90deg,#b9f3cf 0 12.5%,#5fd88c 0 25%,#22b35c 0 37.5%,#f2e94e 0 50%,#ffc233 0 62.5%,#ff8a1f 0 75%,#e5213a 0 87.5%,#8e0f2b 0)}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;text-align:center;font-size:12px}.stats div{background:#fff4ea;border-radius:12px;padding:10px 4px}.stats b{display:block;font-size:24px;color:var(--br)}
+.ev{border-left:4px solid var(--c);padding:2px 0 2px 12px;margin:0 0 16px;font-size:14px}.ev p{margin:4px 0}
+.tag{display:inline-block;font-size:12px;padding:3px 9px;border-radius:99px;background:#12b76a1f;color:#0b8a50}.tag.open{background:#e5213a1a;color:var(--r)}
+#modal{position:fixed;left:0;right:0;bottom:0;max-height:82vh;margin:auto;max-width:520px;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -10px 40px #0003;padding:20px 18px calc(24px + env(safe-area-inset-bottom,0px));overflow:auto;transform:translateY(105%);transition:transform .25s;z-index:6}#modal.on{transform:none}
+.si{padding:10px 12px;margin:8px 0;border-radius:12px;background:#fff4ea;border-left:4px solid var(--c);font-size:14px}.si b{display:block}.si span{font-size:12px;font-weight:600}
+.x{float:right;font-size:20px;padding:2px 10px}</style></head><body>
+<header><div class="top"><div><div class="sm">BuildWatch</div><h1>Elmina Green 4</h1></div><div class="my"><div class="sm">My house · Jln Samanea</div><div class="hs"><select id="hjl" aria-label="Jalan"></select><input id="hno" inputmode="numeric" maxlength="2" placeholder="No." aria-label="House number"></div><div class="sm" id="hmsg"></div></div></div>
+<div class="hr"><span class="badge"><i class="dot"></i>Active Monitoring Mesh Connected</span>
+<div class="seg" id="lseg"><button data-l="n">Noise Overview</button><button data-l="a">Air Quality Overview</button></div></div></header>
+<nav class="tabs" id="tabs"><button data-t="dash">Home</button><button data-t="live">Map</button><button data-t="fc">Forecast</button><button data-t="gov">Log</button></nav>
+<main>
+<section class="sec" id="dash"><div class="card gauge" id="main"></div><div class="card" id="home"></div><p class="sm" style="margin:0 4px">Snapshot of 13 Oct 2026, 15:00 local. Regional AQI 198 and PM2.5 122 µg/m³ from IQAir Kuala Lumpur; PM10 is estimated at 1.6× PM2.5. Wind (from SSE, 5 km/h) is also taken from the IQAir page. The hourly forecast (Wed 14 Oct, 08:00–19:00) uses IQAir’s hourly AQI and wind.</p></section>
+<section class="sec" id="mapsec"><div class="card"><div class="row"><h2 id="mt"></h2><div class="seg" id="mseg"><button data-l="a">Dust Dispersion Plume</button><button data-l="n">Noise Heatmap</button></div></div>
+<div class="hrs" id="hrs"></div><canvas id="cv" width="762" height="682"></canvas><div class="sm" id="tip" style="margin-top:8px"></div>
+<div class="row" style="margin-top:8px"><div class="seg" style="width:170px"><button data-z="1">＋</button><button data-z="-1">－</button><button data-z="0">Reset</button></div><span class="sm">Pinch, scroll or drag to zoom and pan</span></div><div class="sm" style="margin-top:8px">Choose your Jalan and type your house number at the top right. Tap an orange house to see its renovation details.</div><div class="gbar"></div><div class="row sm" style="margin-top:6px"><span>Low</span><span>No colour = no impact · tap an orange house</span><span>High</span></div></div><div class="card" id="homeM"></div></section>
+<section class="sec" id="gov"><div class="card" style="grid-column:1/-1"><h2>Automated interventions today</h2><div class="stats" id="stats"></div></div><div class="card" style="grid-column:1/-1"><h2>Township Governance &amp; Action Timeline</h2><div id="log"></div></div></section>
+</main>
+<aside id="modal" aria-label="Renovation house details"></aside>
+<script>
+const $=s=>document.querySelector(s),COL=['var(--g)','var(--y)','var(--o)','var(--r)'],CH=['#12b76a','#f7c500','#ff7a1a','#e5213a'];
+const lv=(v,t)=>(t=='n'?[54.99,70.99,85]:[50,100,200]).filter(x=>v>x).length;
+const BP=[[0,9,0,50],[9.1,35.4,51,100],[35.5,55.4,101,150],[55.5,125.4,151,200],[125.5,225.4,201,300],[225.5,325.4,301,400],[325.5,500.4,401,500]];
+const aqi=c=>{c=Math.floor(c*10)/10;const b=BP.find(b=>c<=b[1])||BP[6];return Math.round((b[3]-b[2])/(b[1]-b[0])*(Math.min(c,500.4)-b[0])+b[2])};
+const band=a=>a<=50?'Good':a<=100?'Moderate':a<=150?'Unhealthy for Sensitive Groups':a<=200?'Unhealthy':'Very Unhealthy';
+const CP=['N','NE','E','SE','S','SW','W','NW'],cmp=d=>CP[Math.round(((d%360)+360)%360/45)%8],ALPHA=.2;
+// sensor pods: d = 3D distance to boundary (m), b = bearing to boundary, l/h = light/heavy works telemetry
+const S=[{nm:'Ground-Floor Front Door',d:6,b:120,l:{n:82,p:75,q:130},h:{n:101,p:280,q:600}},
+{nm:'Kitchen Window',d:9,b:90,l:{n:80,p:65,q:115},h:{n:103,p:450,q:980}},
+{nm:'1st-Floor Back Door',d:12,b:300,l:{n:78,p:55,q:100},h:{n:96,p:180,q:420}}];
+const H=[{lot:'EG21A-090',eta:'Nov 15, 2026',k:1,sch:[['Morning (09:00 – 12:00)','Wall Hacking & Demolition','HEAVY DUST / HIGH NOISE',3],['Afternoon (13:00 – 17:00)','Tile Laying & Painting','MODERATE DUST / LOW NOISE',1]]},
+{lot:'EG21B-058',eta:'Dec 2, 2026',k:.45,sch:[['Morning (09:00 – 12:00)','Roof Truss Works','MODERATE DUST / MODERATE NOISE',1],['Afternoon (13:00 – 17:00)','Plastering','LOW DUST / LOW NOISE',0]]},{lot:'EG21A-044',eta:'Dec 20, 2026',k:.7,sch:[['Morning (09:00 – 12:00)','Floor Tile Hacking','HEAVY DUST / HIGH NOISE',3],['Afternoon (13:00 – 17:00)','Wiring & Plaster Ceiling','MODERATE DUST / LOW NOISE',1]]},{lot:'EG21B-130',eta:'Jan 10, 2027',k:.55,sch:[['Morning (09:00 – 12:00)','Kitchen Cabinet Install','LOW DUST / MODERATE NOISE',1],['Afternoon (13:00 – 17:00)','Painting','LOW DUST / LOW NOISE',0]]}];
+let st={t:'dash',l:'n',heavy:false,mist:false,calm:0},T=0,W={},R={},C={mist:3,alert:1,comp:0};
+const LOG=[{t:'Today, 11:15 AM',txt:'Kitchen Wall Hacking at No. 18, Jalan Samanea U17/105 exceeded PM10 threshold at rear boundary.',act:'1) Automated boundary misting curtain activated (12 mins). 2) Compliance SMS sent to Contractor Lead.',res:'Resolved — Dust dropped back to 42 µg/m³ (Safe).',open:false}];
+function tick(){
+ W={sp:5,from:154,pm:122,pm10:195};T++;
+ const to=W.from+180;let nE=Math.pow(10,4.9),dp=0,dq=0;
+ S.forEach(s=>{const m=st.heavy?s.h:s.l,j=()=>1+(Math.random()-.5)*.04;
+  const tg={n:m.n+(Math.random()-.5)*1.2,p:(m.p+W.pm-53.4)*j(),q:(m.q+W.pm10-85)*j()},o=s.v;s.v=o?{n:o.n+(tg.n-o.n)*.25,p:o.p+(tg.p-o.p)*.25,q:o.q+(tg.q-o.q)*.25}:tg;
+  s.w=Math.max(.1,.55+.45*Math.cos((s.b-to)*Math.PI/180)); // wind-direction weight
+  s.nb=s.v.n-20*Math.log10(s.d)-6;nE+=Math.pow(10,s.nb/10);
+  const f=Math.exp(-ALPHA*s.d)*s.w;
+  s.dp=Math.max(0,s.v.p-W.pm)*f;s.dq=Math.max(0,s.v.q-W.pm10)*f;dp+=s.dp;dq+=s.dq});
+ R={noise:10*Math.log10(nE),dp,dq,p:W.pm+dp,q:W.pm10+dq};
+ R.base=aqi(W.pm);R.aqi=aqi(R.p); // sum masses first, then convert
+ const br=R.noise>80||(R.aqi>200&&R.dp>=35),now=new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+ if(br&&!st.mist){st.mist=true;st.calm=0;C.mist++;C.alert++;
+  LOG.unshift({t:'Today, '+now,txt:R.noise>80?`Noise at ${H[0].addr.split(' (')[0]} boundary reached ${Math.round(R.noise)} dB (limit 80 dB).`:`Boundary AQI reached ${R.aqi} (PM2.5 ${Math.round(R.p)} µg/m³) from ${H[0].addr.split(' (')[0]} exits.`,act:'1) Automated boundary misting curtain activated. 2) Compliance SMS sent to Contractor Lead.',res:'',open:true})}
+ else if(!br&&st.mist&&++st.calm>=3){st.mist=false;LOG[0].open=false;LOG[0].res=`Resolved — Dust dropped back to ${Math.round(R.p)} µg/m³ (${band(R.aqi)}), noise ${Math.round(R.noise)} dB.`}
+ render()}
+const NS=[['< 55 dB','Minimal Impact (conversation level)'],['55 – 70 dB','Moderate Impact (lawnmower / light drilling)'],['71 – 85 dB','High Impact (intense power tools)'],['> 85 dB','Breach Level (exceeds township limit)']];
+const NN=['Noise level at front porch equivalent to background street traffic. Work compliant.','Comparable to a lawnmower or light drilling at the boundary. Within limits; monitoring continues.','Intense power tools are audible next door. Contractor asked to reduce intensity.','Exceeds township limit. Automated intervention logged and contractor alerted.'];
+function gauge(v,max,l,unit,lab){return `<svg viewBox="0 0 200 125"><path d="M20 105A80 80 0 0 1 180 105" fill="none" stroke="#ffe9d9" stroke-width="14" stroke-linecap="round" pathLength="100"/><path d="M20 105A80 80 0 0 1 180 105" fill="none" stroke="${CH[l]}" stroke-width="14" stroke-linecap="round" pathLength="100" stroke-dasharray="${Math.min(100,v/max*100)} 100"/><text x="100" y="92" text-anchor="middle" fill="#1f2937" font-size="34" font-weight="700">${Math.round(v)}</text><text x="100" y="112" text-anchor="middle" fill="#6b7280" font-size="11">${unit}</text></svg><div style="color:${COL[l]};font-weight:600">${lab}</div>`}
+function render(){if(st.t=='live'&&T%5==0)dirty=true;
+ const U=here(),n=U.noise,ln=lv(n,'n'),a=U.aqi,la=lv(a,'a'),net=a-R.base;
+ if(st.l=='n')$('#main').innerHTML=`<h2 style="text-align:left">Live Noise at Your Location</h2><p class="sm" style="text-align:left;margin:-6px 0 6px">Worst of your front porch and backyard, counting the houses in between that block noise. Open-air value without them: ${Math.round(U.free.noise)} dB. Change your house at the top right.</p>${gauge(n,120,ln,'dB at neighbor boundary',NS[ln][1].split(' (')[0])}<div class="scale" style="margin-top:12px;text-align:left">${NS.map((s,i)=>`<div class="${i==ln?'on':''}"><i style="background:${COL[i]}"></i><b>${s[0]}</b>${s[1]}</div>`).join('')}</div><p class="note" style="--c:${COL[ln]};text-align:left">${NN[ln]}</p>`;
+ else{const pm=U.p,q=U.q;$('#main').innerHTML=`<h2 style="text-align:left">Live Air Quality at Your Location</h2><p class="sm" style="text-align:left;margin:-6px 0 6px">Worst of your front porch and backyard, counting the houses in between that hold back dust. Open-air value without them: AQI ${U.free.aqi}. Change your house at the top right.</p>${gauge(a,300,la,'AQI',`AQI ${a} — ${band(a)}`)}
+ <div style="text-align:left;margin-top:12px"><div class="bar" style="height:30px"><div style="width:${R.base/a*100}%;background:${CH[lv(R.base,'a')]};display:flex;align-items:center;padding-left:8px;color:#fff;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden">Regional baseline ${R.base}</div><div style="width:${Math.max(0,net)/a*100}%;background:repeating-linear-gradient(45deg,${CH[la]} 0 6px,#ffffff90 6px 10px)"></div></div>
+ <div class="kv"><span><i class="sw" style="background:${CH[lv(R.base,'a')]}"></i>Regional baseline (IQAir Kuala Lumpur)</span><b>${R.base} AQI · ${band(R.base)}</b></div><div class="kv"><span><i class="sw" style="background:repeating-linear-gradient(45deg,${CH[la]} 0 3px,#fff 3px 5px)"></i>Net renovation dust (striped part)</span><b>+${Math.max(0,net)} AQI</b></div><div class="kv"><span>Total combined boundary</span><b>${a} AQI</b></div></div>
+ <div class="mini"><div style="text-align:left"><b style="color:${COL[lv(pm,'a')>0?la:0]}">${Math.round(pm)} µg/m³</b>PM2.5 — ${pm<=12?'Clean air outdoors':pm<=35.4?'Acceptable; very sensitive people may notice':pm<=55.4?'Mild throat irritation possible outdoors':pm<=150?'Close windows; limit outdoor exertion':'Avoid outdoor activity'}</div><div style="text-align:left"><b>${Math.round(q)} µg/m³</b>PM10 — ${q<=54?'Low coarse dust':q<=154?'Moderate dust; eye irritation possible':'High coarse dust; misting active'}</div></div>`}
+ $('#home').innerHTML=hc(false);if(st.t=='fc'||st.t=='live')$('#homeM').innerHTML=hc(st.t=='fc');
+ $('#stats').innerHTML=`<div><b>${C.mist}</b>Misting cycles</div><div><b>${C.alert}</b>Contractor alerts</div>`;
+ $('#log').innerHTML=LOG.map(e=>`<div class="ev" style="--c:${e.open?'var(--r)':'var(--g)'}"><div class="sm">${e.t}</div><p><b>Incident:</b> ${e.txt}</p><p><b>Automated intervention:</b> ${e.act}</p><span class="tag ${e.open?'open':''}">${e.open?'Active — misting in progress':e.res}</span></div>`).join('');
+}
+// ---- map ----
+const cv=$('#cv'),cx=cv.getContext('2d'),hx=a=>Math.round(a*255).toString(16).padStart(2,'0');
+const IMG=new Image();IMG.src="map.jpg"; // the plan image (map.jpg) must sit in the same folder as this file;
+const PX=.584,UH={x:606,y:332,f:[0,-1]},HC=document.createElement('canvas');HC.width=381;HC.height=341;const hg=HC.getContext('2d');let dirty=true;
+const PAL=[[185,243,207],[95,216,140],[34,179,92],[242,233,78],[255,194,51],[255,138,31],[229,33,58],[142,15,43]],TH={n:[45,50,55,60,66,72,78,85],a:[1.5,4,8,15,30,60,120,200]};
+// exit points per house (front door faces north, kitchen window and back door face south)
+const pmOf=a=>{const b=BP.find(b=>a<=b[3])||BP[6];return (a-b[2])/(b[3]-b[2])*(b[1]-b[0])+b[0]};
+// hourly forecast from IQAir (AQI, wind km/h, wind-from degrees), 08:00-19:00
+const FC=[[8,94,3,65],[9,94,2,150],[10,94,5,189],[11,105,6,179],[12,105,6,166],[13,105,8,174],[14,121,11,158],[15,121,13,144],[16,121,11,146],[17,114,8,151],[18,114,7,149],[19,114,5,139]].map(a=>({h:a[0],aqi:a[1],pm:pmOf(a[1]),sp:a[2],from:a[3]}));let FS=3;
+const WF=fc=>fc?FC[FS]:W,sched=(h,hr)=>{const i=hr>=9&&hr<=11?0:hr>=13&&hr<=16?1:-1;return i<0?-1:h.sch[i][3]}; // -1 = no works that hour
+function ex(h,fc,w=WF(fc)){const L=fc?sched(h,w.h):3;return S.map((s,i)=>{const v=fc?(L>=3?s.h:s.l):s.v,g=fc&&L==0?-8:0,e={x:h.x+(h.f[0]*[8.8,-8.8,-8.8][i]-h.f[1]*[0,1.5,0][i])/PX,y:h.y+(h.f[1]*[8.8,-8.8,-8.8][i]+h.f[0]*[0,1.5,0][i])/PX};
+ e.n=L<0?-99:v.n+10*Math.log10(h.k)+g;e.dp=L<0?0:Math.max(0,v.p-(fc?53.4:w.pm))*h.k*(g?.4:1);e.dq=L<0?0:Math.max(0,v.q-(fc?85:w.pm10))*h.k*(g?.4:1);return e})}
+let OB=true;const HB=8.5,LAM=.68; // OB: count houses as obstacles; HB: 2-storey roof height (m); LAM: wavelength at 500 Hz (m)
+// Does the path A->B cross a terrace row (50 ft deep footprint)? Returns [noise insertion loss dB over the roof (Maekawa), rows crossed]
+function shield(ax,ay,bx,by,hs){let il=0,nr=0;const D=Math.hypot(bx-ax,by-ay);if(D<1)return[0,0];const sx0=Math.min(ax,bx),sx1=Math.max(ax,bx),sy0=Math.min(ay,by),sy1=Math.max(ay,by);
+ for(const r of ROWS){if(sx1<r.x0||sx0>r.x1||sy1<r.y0||sy0>r.y1)continue;
+  const ua=(ax-r.ox)*r.ux+(ay-r.oy)*r.uy,va=(ax-r.ox)*r.vx+(ay-r.oy)*r.vy,du=((bx-r.ox)*r.ux+(by-r.oy)*r.uy)-ua,dv=((bx-r.ox)*r.vx+(by-r.oy)*r.vy)-va;
+  let t0=0,t1=1;const cl=(p,q)=>{if(p==0)return q>=0;const t=q/p;if(p<0){if(t>t1)return false;if(t>t0)t0=t}else{if(t<t0)return false;if(t<t1)t1=t}return true};
+  if(!(cl(-du,ua)&&cl(du,r.len-ua)&&cl(-dv,va+r.hd)&&cl(dv,r.hd-va)))continue;
+  const w=(t1-t0)*D*PX;if(w<1)continue;
+  const dA=t0*D*PX,dB=(1-t1)*D*PX,A=Math.hypot(dA,HB-hs),B=Math.hypot(dB,HB-1.5),dir=Math.hypot(dA+w+dB,hs-1.5),N=2*(A+w+B-dir)/LAM;
+  const f=Math.min(1,w/6);il+=f*Math.min(15,10*Math.log10(3+20*N));nr+=f}
+ return[Math.min(il,24),nr]}
+function fld(x,y,E,ux,uy,L,sp,ob=OB){let a=0;for(const e of E){const dx=x-e.x,dy=y-e.y,dd=Math.hypot(dx,dy)||1,c=(dx*ux+dy*uy)/dd,d=Math.max(1.5,dd*PX);
+ if(L=='n'){let l=e.n-20*Math.log10(d)-6-.06*d;if(ob&&l>38)l-=shield(e.x,e.y,x,y,2)[0];a+=Math.pow(10,l/10)}
+ else{let v=(L=='q'?e.dq:e.dp)*Math.exp(-ALPHA*d*(1-.6*Math.min(1,sp/8)*c))*Math.max(.1,.55+.45*c);if(ob&&v>.3)v*=Math.max(.3,Math.pow(.7,shield(e.x,e.y,x,y,2)[1])); // each house row crossed holds back ~30% of the dust
+  a+=v}}
+ return L=='n'?10*Math.log10(a||1e-9):a}
+const wv=w=>{const t=(w.from+180)*Math.PI/180;return[Math.sin(t),-Math.cos(t)]};
+let HJ=null,HCv=null;
+function startHeat(){const fc=st.t=='fc',w=WF(fc);HJ={w,E:H.flatMap(h=>ex(h,fc)),uv:wv(w),im:hg.createImageData(381,341),th:TH[st.l],L:st.l,j:0,v:{x:V.x,y:V.y,z:V.z}}}
+// builds the heat layer a few rows per frame so the page never freezes
+function stepHeat(ms){const J=HJ;if(!J)return;const t0=performance.now();
+ while(J.j<341&&performance.now()-t0<ms){const j=J.j++;for(let i=0;i<381;i++){const v=fld(J.v.x+(i*2+1)/J.v.z,J.v.y+(j*2+1)/J.v.z,J.E,J.uv[0],J.uv[1],J.L,J.w.sp,false);let b=0;while(b<8&&v>=J.th[b])b++;if(!b)continue;const c=PAL[b-1],o=(j*381+i)*4,d=J.im.data;d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=205}}
+ if(J.j>=341){hg.putImageData(J.im,0,0);HCv=J.v;HJ=null}}
+function side(nm,pt,E,ux,uy,w){const n=fld(pt[0],pt[1],E,ux,uy,'n',w.sp),d=fld(pt[0],pt[1],E,ux,uy,'a',w.sp),hit=n>=45||d>=1.5,l=hit?Math.max(lv(n,'n'),d<4?0:d<15?1:d<60?2:3):0;return{nm,n,d,hit,l,sc:hit?l*1e3+n+d:0}}
+function hc(fc){const w=WF(fc),E=H.flatMap(h=>ex(h,fc)),[ux,uy]=wv(w),[pf,pb]=hp(),F=side('Front porch',pf,E,ux,uy,w),B=side('Backyard',pb,E,ux,uy,w),wo=B.sc>F.sc?B:F;
+ const dir=((bd)=>bd>.3?'toward your backyard':bd<-.3?'toward your front porch':'across your home')(-(ux*UH.f[0]+uy*UH.f[1])),tile=s=>`<div style="border-left:4px solid ${s.hit?COL[s.l]:'#d1d5db'}"><b style="color:${s.hit?COL[s.l]:'var(--mu)'}">${s.nm}</b>${s.hit?`${Math.round(s.n)} dB · +${s.d.toFixed(1)} µg/m³ dust · AQI ${aqi(w.pm+s.d)}`:'No impact (noise and dust stay below detection)'}</div>`;
+ return `<h2>${fc?String(w.h).padStart(2,'0')+':00 forecast: ':''}Impact on your home</h2><div class="mini">${tile(F)}${tile(B)}</div><p class="note" style="--c:${wo.hit?COL[wo.l]:'var(--g)'}">${wo.hit?`<b>${wo.nm}</b> is the more affected side. Wind from the ${cmp(w.from)} at ${w.sp} km/h carries dust ${dir}.`:fc&&!H.some(h=>sched(h,w.h)>=0)?'No renovation works are scheduled at this hour, so nothing reaches your home.':'Neither your front porch nor your backyard is affected.'}</p><p class="sm">No. ${UH.no}, ${UH.street} (lot ${UH.code}). Front porch faces the street; the backyard is the opposite side. Change house from “My house” at the top right.</p>`}
+const FD={N:[0,-1],E:[1,0],S:[0,1],W:[-1,0]},FN={'0,-1':'north','1,0':'east','0,1':'south','-1,0':'west'};
+const hp=()=>[[UH.x+UH.f[0]*9/PX,UH.y+UH.f[1]*9/PX],[UH.x-UH.f[0]*9/PX,UH.y-UH.f[1]*9/PX]]; // [front porch point, backyard point]
+const saveHome=()=>{try{localStorage.setItem('bw_home',JSON.stringify(UH))}catch(e){}};
+function pinUI(){const b=$('#pin');if(!b)return;b.textContent=st.pin?'👆 Tap the map to place yourself…':'📍 Place my location';b.classList.toggle('act',!!st.pin);cv.style.cursor=st.pin?'crosshair':'grab';document.querySelectorAll('[data-f]').forEach(x=>x.classList.toggle('on',FD[x.dataset.f].join()==UH.f.join()))}
+function here(){const E=H.flatMap(h=>ex(h,false)),[ux,uy]=wv(W),o={};
+ for(const ob of[false,true]){OB=ob;let sn=-99,dp=0,dq=0;for(const pt of hp()){sn=Math.max(sn,fld(pt[0],pt[1],E,ux,uy,'n',W.sp));dp=Math.max(dp,fld(pt[0],pt[1],E,ux,uy,'a',W.sp));dq=Math.max(dq,fld(pt[0],pt[1],E,ux,uy,'q',W.sp))}
+  o[ob]={noise:10*Math.log10(Math.pow(10,sn/10)+Math.pow(10,4.9)),dp,dq,p:W.pm+dp,q:W.pm10+dq,aqi:aqi(W.pm+dp)}}
+ OB=true;return Object.assign({},o[true],{free:o[false]})}
+function hrStat(i){const w=FC[i],E=H.flatMap(h=>ex(h,true,w)),[ux,uy]=wv(w),on=H.some(h=>sched(h,w.h)>=0);if(!on)return{on};let n=0,d=0;for(const pt of hp()){n=Math.max(n,fld(pt[0],pt[1],E,ux,uy,'n',w.sp));d=Math.max(d,fld(pt[0],pt[1],E,ux,uy,'a',w.sp))}return{on,n,d,a:aqi(w.pm+d)}}
+function chips(){const hs=$('#hrs');hs.style.display=st.t=='fc'?'flex':'none';if(st.t!='fc')return;const sl=hs.scrollLeft;
+ hs.innerHTML=FC.map((w,i)=>{const r=hrStat(i),a=r.on?r.a:w.aqi;return `<button data-hr="${i}" class="${i==FS?'on':''}"><b>${String(w.h).padStart(2,'0')}:00</b><span style="${i==FS?'':'color:'+COL[lv(a,'a')]}">AQI ${a}</span><br>${r.on?Math.round(r.n)+' dB':'No works'}</button>`}).join('');hs.scrollLeft=sl}
+const V={z:1,x:0,y:0};
+function clampV(){V.x=Math.max(0,Math.min(762-762/V.z,V.x));V.y=Math.max(0,Math.min(682-682/V.z,V.y));dirty=true}
+function zoomAt(f,sx,sy){const z0=V.z,z1=Math.max(1,Math.min(6,z0*f)),wx=V.x+sx/z0,wy=V.y+sy/z0;V.z=z1;V.x=wx-sx/z1;V.y=wy-sy/z1;clampV()}
+function zb(v){if(v==0){V.z=1;V.x=V.y=0;dirty=true}else zoomAt(v>0?1.6:1/1.6,381,341)}
+function draw(t){
+ requestAnimationFrame(draw);if(st.t!='live'&&st.t!='fc')return;if(dirty){startHeat();dirty=false}stepHeat(7);
+ const fc=st.t=='fc',w=WF(fc),[ux,uy]=wv(w),p=(t/900)%1,z=V.z,Q=(x,y)=>[(x-V.x)*z,(y-V.y)*z];
+ cx.setTransform(1,0,0,1,0,0);cx.clearRect(0,0,762,682);cx.setTransform(z,0,0,z,-V.x*z,-V.y*z);if(IMG.complete)cx.drawImage(IMG,0,0,762,682);cx.fillStyle='#ffffff4d';cx.fillRect(0,0,762,682);
+ cx.setTransform(1,0,0,1,0,0);cx.imageSmoothingEnabled=true;if(HCv)cx.drawImage(HC,(HCv.x-V.x)*z,(HCv.y-V.y)*z,762*z/HCv.z,682*z/HCv.z);
+ const q=Math.max(1,762/(cv.clientWidth||762));
+ H.forEach(h=>{const [X,Y]=Q(h.x,h.y),r=q*Math.min(6,3+1.2*z);cx.strokeStyle='#ff6b00';cx.lineWidth=2.5*q;cx.globalAlpha=1-p;cx.beginPath();cx.arc(X,Y,r+p*20*q,0,7);cx.stroke();cx.globalAlpha=1;cx.fillStyle='#ff6b00';cx.strokeStyle='#fff';cx.beginPath();cx.arc(X,Y,r,0,7);cx.fill();cx.stroke()});
+ const [UX,UY]=Q(UH.x,UH.y),[fq,bq]=hp().map(a=>Q(a[0],a[1])),Rf=q*Math.min(11,5+1.6*z),kf=Rf/15;
+ cx.fillStyle='#ff6b00';cx.strokeStyle='#fff';cx.lineWidth=2.5*q;cx.beginPath();cx.arc(UX,UY,Rf,0,7);cx.fill();cx.stroke();
+ cx.fillStyle='#fff';cx.beginPath();cx.arc(UX,UY-.4*Rf,.3*Rf,0,7);cx.fill();cx.beginPath();cx.moveTo(UX-8*kf,UY+9*kf);cx.quadraticCurveTo(UX-8*kf,UY-kf,UX,UY-kf);cx.quadraticCurveTo(UX+8*kf,UY-kf,UX+8*kf,UY+9*kf);cx.closePath();cx.fill();
+ 
+ cx.fillStyle='#fffffff0';cx.fillRect(10*q,10*q,(fc?226:182)*q,28*q);cx.fillStyle='#ff6b00';cx.font=`600 ${12*q}px system-ui`;cx.fillText(`${fc?String(w.h).padStart(2,'0')+':00 · ':''}Wind from ${cmp(w.from)} · ${w.sp} km/h`,18*q,29*q);
+ const ax=(fc?216:172)*q,ay=24*q;cx.strokeStyle='#ff6b00';cx.lineWidth=2.5*q;cx.beginPath();cx.moveTo(ax,ay);cx.lineTo(ax+ux*14*q,ay+uy*14*q);cx.stroke();cx.fillStyle='#ff6b00';cx.beginPath();cx.arc(ax+ux*14*q,ay+uy*14*q,3.5*q,0,7);cx.fill();
+ const L=20/PX*z,by=682-10*q;cx.fillStyle='#fffffff0';cx.fillRect(10*q,by-26*q,L+20*q,26*q);cx.strokeStyle='#1f2937';cx.lineWidth=2.5*q;cx.beginPath();cx.moveTo(20*q,by-8*q);cx.lineTo(20*q+L,by-8*q);cx.stroke();cx.fillStyle='#1f2937';cx.font=`600 ${11*q}px system-ui`;cx.fillText('20 m',20*q,by-13*q)}
+const P=new Map();let mv=0;
+const cp=e=>{const r=cv.getBoundingClientRect(),k=762/r.width;return[(e.clientX-r.left)*k,(e.clientY-r.top)*k]};
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);P.set(e.pointerId,cp(e));mv=0});
+cv.addEventListener('pointermove',e=>{if(!P.has(e.pointerId))return;const o=P.get(e.pointerId),n=cp(e);
+ if(P.size==1){V.x-=(n[0]-o[0])/V.z;V.y-=(n[1]-o[1])/V.z;mv+=Math.abs(n[0]-o[0])+Math.abs(n[1]-o[1]);clampV()}
+ else if(P.size==2){const q=[...P.entries()].find(a=>a[0]!=e.pointerId)[1],d0=Math.hypot(o[0]-q[0],o[1]-q[1]),d1=Math.hypot(n[0]-q[0],n[1]-q[1]);if(d0>5){zoomAt(d1/d0,(n[0]+q[0])/2,(n[1]+q[1])/2);mv+=99}}
+ P.set(e.pointerId,n)});
+cv.addEventListener('pointerup',e=>{const w=P.size,n=cp(e);P.delete(e.pointerId);if(mv<8&&w==1){const x=V.x+n[0]/V.z,y=V.y+n[1]/V.z,h=H.find(h=>Math.hypot(x-h.x,y-h.y)<8/V.z);if(h)openM(h);}});
+cv.addEventListener('pointercancel',e=>P.delete(e.pointerId));
+cv.addEventListener('wheel',e=>{e.preventDefault();const n=cp(e);zoomAt(e.deltaY<0?1.25:.8,n[0],n[1])},{passive:false});
+cv.addEventListener('pointermove',()=>{$('#tip').textContent=(w=>`Wind from the ${cmp(w.from)} at ${w.sp} km/h pushes fine particles toward the ${cmp(w.from+180)}`)(WF(st.t=='fc'))});
+function openM(h){$('#modal').innerHTML=`<button class="x" onclick="$('#modal').classList.remove('on')" aria-label="Close">✕</button><div class="sm">Active renovation</div><h2 style="font-size:18px">${h.addr}</h2><div class="sm">Estimated completion: ${h.eta}</div><h2 style="margin-top:18px">Daily schedule &amp; intensity</h2>${h.sch.map(s=>`<div class="si" style="--c:${COL[s[3]]}"><b>${s[0]}</b>${s[1]}<br><span>${s[2]}</span></div>`).join('')}
+<p class="note" style="--c:var(--g)"><b>Resident perception note:</b> noise and dust measured at the tool face are far higher than what reaches your boundary. Levels fall sharply with distance (dust roughly e<sup>−0.2·d</sup>), and the mesh keeps the house exits under watch.</p>
+<p class="sm">Live at boundary: ${Math.round(49+(R.noise-49)*h.k)} dB · PM2.5 ${(W.pm+R.dp*h.k).toFixed(1)} µg/m³</p>`;$('#modal').classList.add('on')}
+// ---- nav ----
+function view(){document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
+ $(st.t=='live'||st.t=='fc'?'#mapsec':'#'+st.t).classList.add('on');
+ document.querySelectorAll('#tabs [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t==st.t));
+ document.querySelectorAll('[data-l]').forEach(b=>b.classList.toggle('on',b.dataset.l==st.l));
+ $('#mt').textContent=st.t=='fc'?'Hourly Prediction · Wed 14 Oct':'Live Spatial Heatmap';dirty=true;chips();pinUI();$('#lseg').style.display=st.t=='dash'?'flex':'none';render()}
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.t)st.t=b.dataset.t;if(b.dataset.l)st.l=b.dataset.l;if(b.dataset.z!==undefined)zb(+b.dataset.z);if(b.dataset.hr!==undefined)FS=+b.dataset.hr;if(b.id=='pin')st.pin=!st.pin;if(b.dataset.f){UH.f=FD[b.dataset.f];saveHome()}if(b.id=='sim'){st.heavy=!st.heavy;tick()}view()});
+
+// ---- Elmina Green 4 lots: [phase,lotLeft,lotRight,street,front side,No. at left,No. at right,x,y of left/right end lots on the plan]
+const K=762/2037,BK=[["A",1,15,"103","S",53,25,322,585,647,522],["A",16,27,"103","S",23,1,703,510,973,465],["B",1,9,"104","S",2,18,1090,458,1288,410],["B",10,16,"104","S",20,32,1345,405,1492,375],["A",28,39,"103","N",48,26,410,703,676,653],["A",40,51,"103","N",24,2,742,655,1003,603],["A",63,52,"105","S",23,1,758,772,1035,718],["A",74,64,"105","S",45,25,400,833,718,780],["A",75,86,"105","N",48,26,425,940,738,872],["A",87,98,"105","N",24,2,775,880,1045,828],["A",110,99,"107","S",23,1,790,998,1068,940],["A",121,111,"107","S",45,25,450,1075,758,1013],["A",122,128,"107","N",38,26,590,1190,770,1118],["A",129,140,"107","N",24,2,822,1125,1088,1060],["A",152,141,"109","S",23,1,838,1230,1128,1160],["A",158,153,"109","S",35,25,608,1290,790,1218],["A",159,165,"109","N",38,26,628,1420,825,1350],["A",166,177,"109","N",24,2,862,1335,1160,1270],["A",189,178,"111","S",23,1,870,1470,1150,1393],["B",17,25,"104","N",1,17,1100,590,1318,530],["B",26,35,"104","N",19,37,1358,520,1590,485],["B",45,36,"106","S",20,38,1380,640,1630,590],["B",54,46,"106","S",2,18,1110,693,1348,640],["B",55,63,"106","N",1,17,1140,790,1358,737],["B",64,71,"106","N",19,33,1405,760,1600,710],["B",79,72,"108","S",20,34,1420,880,1630,832],["B",88,80,"108","S",2,18,1155,942,1380,895],["B",89,97,"108","N",1,17,1210,1050,1395,1000],["B",98,107,"108","N",19,37,1450,1000,1688,945],["B",117,108,"110","S",20,38,1465,1110,1710,1055],["B",126,118,"110","S",2,18,1195,1178,1420,1125],["B",127,135,"110","N",1,17,1230,1290,1462,1235],["B",136,143,"110","N",19,33,1490,1255,1695,1205],["B",151,144,"112","S",20,34,1512,1345,1725,1290],["B",160,152,"112","S",2,18,1250,1410,1460,1360]],LOT={},LOTS=[];
+for(const b of BK){const [p,a,z,st,f,n0,n1,x0,y0,x1,y1]=b,c=Math.abs(z-a)+1,sg=z>=a?1:-1,dx=x1-x0,dy=y1-y0,Lg=Math.hypot(dx,dy);let fx=-dy/Lg,fy=dx/Lg;if(f=='N'){fx=-fx;fy=-fy}
+ for(let i=0;i<c;i++){const t=c>1?i/(c-1):0,n3=String(a+sg*i).padStart(3,'0'),id='EG21'+p+'-'+n3,l={id,ph:p,n3,code:p+'-'+n3,street:'Jalan Samanea U17/'+st,no:Math.round(n0+(n1-n0)*t),x:(x0+dx*t)*K,y:(y0+dy*t)*K,f:[fx,fy]};LOT[id]=l;LOTS.push(l)}}
+const ROWS=BK.map(b=>{const c=Math.abs(b[2]-b[1])+1,dx=(b[9]-b[7])*K,dy=(b[10]-b[8])*K,Lg=Math.hypot(dx,dy),sp=Lg/(c-1),ux=dx/Lg,uy=dy/Lg,hd=7.6/PX,ox=b[7]*K-ux*sp/2,oy=b[8]*K-uy*sp/2,len=Lg+sp,xs=[ox,ox+ux*len],ys=[oy,oy+uy*len];
+ return{ox,oy,ux,uy,vx:-uy,vy:ux,len,hd,x0:Math.min(...xs)-hd,x1:Math.max(...xs)+hd,y0:Math.min(...ys)-hd,y1:Math.max(...ys)+hd}});
+H.forEach(h=>{const l=LOT[h.lot];h.x=l.x;h.y=l.y;h.f=l.f;h.addr='No. '+l.no+', '+l.street+' (lot '+l.code+')'});
+const LK={},RG={};LOTS.forEach(l=>{LK[l.street+'|'+l.no]=l;const r=RG[l.street]=RG[l.street]||{};const k=l.no%2?'odd':'even';r[k]=r[k]?[Math.min(r[k][0],l.no),Math.max(r[k][1],l.no)]:[l.no,l.no]});
+const applyHome=id=>{const l=LOT[id];Object.assign(UH,{x:l.x,y:l.y,f:l.f,id,code:l.code,no:l.no,street:l.street});$('#hjl').value=l.street;$('#hno').value=l.no;$('#hmsg').textContent='Lot '+l.code};
+function setHome(id){if(!LOT[id])return;applyHome(id);try{localStorage.setItem('bw_house',id)}catch(e){}if(V.z>1){V.x=UH.x-381/V.z;V.y=UH.y-341/V.z;clampV()}view()}
+{const hn=$('#hno'),hj=$('#hjl');hj.innerHTML=Object.keys(RG).sort().map(k=>'<option value="'+k+'">'+k.replace('Jalan Samanea ','')+'</option>').join('');
+ const pick=()=>{const v=hn.value.replace(/\D/g,'').slice(0,2);hn.value=v;if(!v){$('#hmsg').textContent='';return}const l=LK[hj.value+'|'+(+v)];if(l)setHome(l.id);else{const r=RG[hj.value];$('#hmsg').textContent='No. '+(+v)+' not found. This street has '+[r.odd&&'odd '+r.odd.join('–'),r.even&&'even '+r.even.join('–')].filter(Boolean).join(' and ')}};
+ hn.addEventListener('input',pick);hj.addEventListener('change',pick);
+ let id='EG21A-091';try{const q=localStorage.getItem('bw_house');if(LOT[q])id=q}catch(e){}applyHome(id)}
+tick();view();requestAnimationFrame(draw);setInterval(tick,2000);
+</script></body></html>
