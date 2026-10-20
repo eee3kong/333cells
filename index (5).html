@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BuildWatch Console</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- React 18 & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel Standalone for inline JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-orange-50 text-slate-900 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { Fragment, useState, useEffect, useMemo, useRef, createContext, useContext } = React;
+
+    const LOGO_URL = "https://lh3.googleusercontent.com/d/1zg2QdCODuEjCtemF8Pg4HNyPg8OXpoHS";
+
+    /* ------------------------------------------------------------------ *
+     *  DYNAMIC LUCIDE ICON HELPER
+     * ------------------------------------------------------------------ */
+    function Icon({ name, size = 16, className = "" }) {
+      const containerRef = useRef(null);
+      useEffect(() => {
+        if (!window.lucide || !containerRef.current) return;
+        const iconDef = window.lucide.icons[name];
+        if (iconDef) {
+          containerRef.current.innerHTML = "";
+          const svgNode = window.lucide.createElement(iconDef);
+          svgNode.setAttribute("width", size);
+          svgNode.setAttribute("height", size);
+          containerRef.current.appendChild(svgNode);
+        }
+      }, [name, size, className]);
+      return <span ref={containerRef} className={`inline-flex items-center justify-center shrink-0 ${className}`} />;
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  ENVIRONMENT CONFIG & HELPER MATH
+     * ------------------------------------------------------------------ */
+    const CENTER = [3.2065, 101.4945];
+    const ACTIONS = [
+      "Contractor instructed to pause heavy machinery",
+      "Acoustic curtain deployed",
+      "Working hours adjusted",
+      "Equipment relocated behind barrier",
+    ];
+    
+    const TASK_OPTS = [
+      "Earthworks & Foundation", "Wall Hacking & Demolition", "Conduit Installation (Concealed)", 
+      "HVAC Ducting & Piping", "DB / MSB / SSB Installation", "Cable Pulling & Wiring", 
+      "Plumbing & Sanitary", "Tile Laying & Flooring", "Plastering & Painting", 
+      "Testing & Commissioning", "Site Cleanup", "Others"
+    ];
+
+    const DEFAULT_CFG = {
+      mistMargin: 10,                       // Reduction Below Threshold (%)
+      ceiling: { noise: 85, dust: 150 },    // absolute breach ceilings
+      levels: {
+        light: { noise: 65, dust: 35 },
+        moderate: { noise: 78, dust: 75 },
+        heavy: { noise: 85, dust: 150 },    // heavy = anything above moderate, up to the ceiling
+      },
+    };
+    // Accepts any saved cfg (incl. the old shape) and returns a complete, consistent one.
+    const normalizeCfg = (v) => {
+      const d = DEFAULT_CFG;
+      if (!v || !v.ceiling) return JSON.parse(JSON.stringify(d)); // legacy / missing -> new defaults
+      const n = (x, f) => (x !== null && x !== undefined && x !== "" && Number.isFinite(Number(x)) ? Number(x) : f);
+      const out = { mistMargin: n(v.mistMargin, d.mistMargin), ceiling: { noise: n(v.ceiling.noise, d.ceiling.noise), dust: n(v.ceiling.dust, d.ceiling.dust) }, levels: {} };
+      ["light", "moderate"].forEach((l) => { out.levels[l] = { noise: n(v.levels?.[l]?.noise, d.levels[l].noise), dust: n(v.levels?.[l]?.dust, d.levels[l].dust) }; });
+      out.levels.heavy = { noise: out.ceiling.noise, dust: out.ceiling.dust };
+      return out;
+    };
+
+    const FALLBACK_COORDS = { "site-a": [3.2085, 101.4950], "site-b": [3.2055, 101.4935], "site-c": [3.2040, 101.4965] };
+    const DEMO_SITES = {
+      "site-a": { live: { name: "Site A", type: "Residential Tower", noise: 62, dust: 28, pump: false }, config: { mode: "auto" } },
+      "site-b": { live: { name: "Site B", type: "Commercial Block", noise: 62, dust: 32, pump: false }, config: { mode: "auto" } },
+      "site-c": { live: { name: "Site C", type: "Infrastructure Works", noise: 58, dust: 30, pump: false }, config: { mode: "auto" } },
+    };
+
+    const DAY0 = new Date(); DAY0.setHours(0, 0, 0, 0);
+    const at = (h, m = 0) => DAY0.getTime() + (h * 60 + m) * 60000;
+    const tm = (t) => { const [h, m] = t.split(":").map(Number); return at(h, m); };
+    const toTimeStr = (ms) => { const d = new Date(ms); return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`; };
+    
+    const clock = () => Date.now(); // real current time
+
+    // Default demo schedule, used only when Firebase has no saved schedule for a site.
+    const DEMO_TASKS = [
+      ["08:00", "10:00", "Earthworks & Foundation", "heavy", "heavy"],
+      ["10:00", "12:00", "Wall Hacking & Demolition", "heavy", "heavy"],
+      ["12:00", "13:00", "Site Cleanup", "light", "light"],
+      ["13:00", "15:00", "Conduit Installation (Concealed)", "moderate", "light"],
+      ["15:00", "17:00", "Plastering & Painting", "light", "moderate"],
+    ];
+    const WALL_HACK = "Wall Hacking & Demolition";
+    const demoSchedule = (siteId) => DEMO_TASKS.map(([s, e, type, noise, dust], i) => ({
+      id: `demo_${siteId}_${i + 1}`, area: 1, start: tm(s), end: tm(e), type, customType: "",
+      noise: type === WALL_HACK && siteId === "site-a" ? "light" : noise,
+      dust: type === WALL_HACK && siteId === "site-a" ? "light" : dust,
+    }));
+    const rebase = (ms) => { const d = new Date(Number(ms)); return Number.isFinite(d.getTime()) ? at(d.getHours(), d.getMinutes()) : null; };
+    // Returns the schedule to display: the saved one (re-dated to today) or the demo one. Never written back unless the admin publishes.
+    const normSchedule = (siteId, raw) => {
+      const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? Object.values(raw) : [];
+      const ok = list.map((w, i) => {
+        const start = rebase(w?.start), end = rebase(w?.end);
+        if (!w || start === null || end === null) return null;
+        const lv = (x) => (LEVELS.includes(x) ? x : "light");
+        const o = { ...w, id: w.id || `s_${siteId}_${i}`, area: Number(w.area) || 1, start, end, noise: lv(w.noise), dust: lv(w.dust) };
+        if (siteId === "site-a" && o.type === WALL_HACK) { o.noise = "light"; o.dust = "light"; }
+        return o;
+      }).filter(Boolean);
+      return ok.length ? ok : demoSchedule(siteId);
+    };
+
+    const STATUS = {
+      green: { label: "Normal", hex: "#16a34a", pill: "bg-green-100 text-green-800", iconName: "CheckCircle2", iconCls: "text-green-600" },
+      amber: { label: "Warning · Misting", hex: "#eab308", pill: "bg-yellow-100 text-yellow-800", iconName: "Droplets", iconCls: "text-yellow-500" },
+      red: { label: "Critical · Breach", hex: "#dc2626", pill: "bg-red-100 text-red-800", iconName: "AlertTriangle", iconCls: "text-red-600" },
+    };
+    const RANK = { green: 0, amber: 1, red: 2 };
+    const LEVELS = ["light", "moderate", "heavy"];
+    const LVL = {
+      light: { label: "Light", cls: "border-orange-200 bg-orange-50 text-orange-700" },
+      moderate: { label: "Moderate", cls: "border-orange-300 bg-orange-200 text-orange-900" },
+      heavy: { label: "Heavy", cls: "border-orange-600 bg-orange-600 text-white" },
+    };
+
+    const maxLvl = (arr) => arr.reduce((m, l) => (LEVELS.indexOf(l) > LEVELS.indexOf(m) ? l : m), "light");
+    const workState = (w, now = clock()) => (w.end <= now ? "done" : w.start <= now ? "active" : "upcoming");
+    const fmt = (ms) => new Date(ms).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true });
+
+    const okNum = (x) => x !== null && x !== undefined && x !== "" && Number.isFinite(Number(x));
+
+    // Maps the ESP32 live telemetry to "Area 1" for display
+    const getAreas = (site) => {
+      const list = site.areas && site.areas.length > 0 ? site.areas : [{ id: 1 }];
+      return list.map(a => ({
+        ...a,
+        pm25: a.id === 1 ? (Number(site.live?.dust) || 0) : (a.pm25 || 0),
+        pm10: a.id === 1 ? Math.round((Number(site.live?.dust) || 0) * 1.2) : (a.pm10 || 0),
+        db: a.id === 1 ? (Number(site.live?.noise) || 0) : (a.db || 0),
+        mist: a.id === 1 ? !!site.live?.pump : !!a.mist,
+        pre: a.id === 1 ? (okNum(site.pre) && Number(site.pre) > 0 ? Number(site.pre) : null) : (okNum(a.pre) && Number(a.pre) > 0 ? Number(a.pre) : null),
+      }));
+    };
+
+    const check = (site, a, c, now = clock()) => {
+      const works = (site.config?.schDetailed || []).filter((w) => w.area === a.id && workState(w, now) === "active");
+      const hasWork = works.length > 0;
+      const noiseLvl = maxLvl(works.map((w) => w.noise));
+      const dustLvl = maxLvl(works.map((w) => w.dust));
+      // With active work: the scheduled level limit applies. Without: only the absolute ceiling.
+      const noiseLimit = hasWork ? c.levels[noiseLvl].noise : c.ceiling.noise;
+      const dustLimit = c.levels[dustLvl].dust;   // expected band, also basis for the misting stop target
+      const dustCeiling = c.ceiling.dust;
+      const noiseBreach = a.db > c.ceiling.noise || (hasWork && a.db > noiseLimit);
+      const dustBreach = a.pm25 > dustCeiling || (hasWork && a.pm25 > dustLimit);
+      const dustTarget = Math.round(dustLimit * (1 - c.mistMargin / 100));
+      const mist = !!a.mist;
+      return { works, hasWork, noiseLvl, dustLvl, noiseLimit, dustLimit, dustCeiling, dustTarget, noiseBreach, dustBreach, mist, status: noiseBreach ? "red" : dustBreach || mist ? "amber" : "green" };
+    };
+
+    const siteStatus = (s, c) => getAreas(s).map((a) => check(s, a, c).status).reduce((w, x) => (RANK[x] > RANK[w] ? x : w), "green");
+    const peakOf = (s) => ({
+      n: getAreas(s).reduce((m, a) => (a.db > m.db ? a : m), { db: 0, id: 1 }),
+      d: getAreas(s).reduce((m, a) => (a.pm25 > m.pm25 ? a : m), { pm25: 0, pm10: 0, id: 1 }),
+    });
+
+    const CfgCtx = createContext(DEFAULT_CFG);
+    const useCfg = () => useContext(CfgCtx);
+
+    const card = "rounded-xl border border-orange-100 bg-white shadow-sm";
+    const btn = "rounded-lg bg-orange-500 px-4 py-2.5 font-semibold text-white hover:bg-orange-600 transition";
+    const field = "w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-orange-500";
+
+    function StatusPill({ status }) {
+      const s = STATUS[status];
+      return (
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.pill}`}>
+          <Icon name={s.iconName} size={12} /> {s.label}
+        </span>
+      );
+    }
+
+    function Meter({ iconName, label, value, unit, limit, sub, caption }) {
+      const ratio = limit > 0 ? value / limit : 0;
+      const color = ratio >= 1 ? "bg-red-500" : ratio >= 0.8 ? "bg-yellow-500" : "bg-green-500";
+      return (
+        <div className={`${card} p-4 sm:p-5`}>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-orange-600">
+            <Icon name={iconName} size={14} /> {label}
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-4xl font-bold tabular-nums sm:text-5xl">{value}</span>
+            <span className="text-slate-500">{unit}</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-orange-50">
+            <div className={`h-full transition-all duration-500 ${color}`} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+          </div>
+          <div className="mt-2 flex justify-between text-xs text-slate-500">
+            <span>{sub}</span><span>Limit {limit} {unit}</span>
+          </div>
+          <div className="mt-3 inline-block rounded-md bg-orange-500 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+            Highest Active Floor Reading
+          </div>
+          <div className="mt-1 text-xs text-slate-500">{caption}</div>
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  LOGIN PAGE
+     * ------------------------------------------------------------------ */
+    function LoginPage({ sites, onLogin }) {
+      const [role, setRole] = useState("admin");
+      const [siteId, setSiteId] = useState(sites.length ? sites[0].id : "site-a");
+      const [email, setEmail] = useState("");
+      const [pw, setPw] = useState("");
+      const [err, setErr] = useState("");
+      useEffect(() => { if (sites.length && !sites.find((s) => s.id === siteId)) setSiteId(sites[0].id); }, [sites]);
+
+      const submit = () => {
+        if (!email.trim() || !pw.trim()) return setErr("Enter your email and password.");
+        onLogin({ role, siteId: role === "manager" ? siteId : null, email });
+      };
+
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-orange-50 p-5 flex-col gap-6">
+          <div className={`${card} w-full max-w-md p-8`}>
+            <div className="flex items-center gap-3 text-2xl font-bold">
+              <img src={LOGO_URL} alt="BuildWatch Logo" className="h-10 w-auto object-contain rounded-lg shadow-sm" />
+              BuildWatch
+            </div>
+            <p className="mt-2 text-sm text-slate-500">Site Operations Console · Environmental telemetry, misting automation and compliance.</p>
+
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              {[["admin", "Administrator"], ["manager", "Site Manager"]].map(([k, l]) => (
+                <button key={k} onClick={() => setRole(k)}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${role === k ? "border-orange-500 bg-orange-500 text-white" : "border-orange-200 bg-white text-slate-700 hover:bg-orange-50"}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {role === "manager" && (
+                <label className="block text-xs font-semibold uppercase text-slate-500">Assigned site
+                  <select value={siteId} onChange={(e) => setSiteId(e.target.value)} className={`${field} mt-1 font-normal normal-case`}>
+                    {sites.map((s) => <option key={s.id} value={s.id}>{s.live?.name} ({s.live?.type})</option>)}
+                  </select>
+                </label>
+              )}
+              <label className="block text-xs font-semibold uppercase text-slate-500">Email
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@township.com" className={`${field} mt-1 font-normal normal-case`} />
+              </label>
+              <label className="block text-xs font-semibold uppercase text-slate-500">Password
+                <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="••••••••" className={`${field} mt-1 font-normal normal-case`} />
+              </label>
+              {err && <div className="text-sm font-medium text-red-600">{err}</div>}
+              <button onClick={submit} className={`${btn} flex w-full items-center justify-center gap-2`}>
+                <Icon name="Lock" size={16} /> Sign in to Console
+              </button>
+            </div>
+            <p className="mt-4 text-center text-xs text-slate-400">Demo mode – any non-empty credentials work. Front-end role selection only; not production security.</p>
+          </div>
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  LEAFLET MAP
+     * ------------------------------------------------------------------ */
+    const pin = (L, hex) =>
+      L.divIcon({
+        className: "", iconSize: [26, 26], iconAnchor: [13, 13],
+        html: `<div style="width:26px;height:26px;border-radius:50%;background:${hex};border:3px solid #fff;box-shadow:0 0 0 3px ${hex}55,0 2px 6px rgba(0,0,0,.4)"></div>`,
+      });
+
+    function SiteMap({ sites, onOpen }) {
+      const c = useCfg();
+      const el = useRef(null), map = useRef(null), markers = useRef({}), openRef = useRef(onOpen);
+      openRef.current = onOpen;
+
+      useEffect(() => {
+        if (!window.L || map.current) return;
+        map.current = window.L.map(el.current).setView(CENTER, 15);
+        window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map.current);
+        return () => { map.current?.remove(); map.current = null; markers.current = {}; };
+      }, []);
+
+      useEffect(() => {
+        if (!window.L || !map.current) return;
+        const ids = new Set(sites.map((s) => s.id));
+        Object.keys(markers.current).forEach((id) => { if (!ids.has(id)) { markers.current[id].remove(); delete markers.current[id]; } });
+        sites.forEach((s) => {
+          if (!s.live || !okNum(s.live.lat) || !okNum(s.live.lng)) return;
+          const st = siteStatus(s, c);
+          const icon = pin(window.L, STATUS[st].hex);
+          const tip = `<b>${s.live.name}</b><br/>${STATUS[st].label}`;
+          
+          if (markers.current[s.id]) {
+            markers.current[s.id]
+              .setLatLng([s.live.lat, s.live.lng])
+              .setIcon(icon)
+              .setTooltipContent(tip);
+          } else {
+            markers.current[s.id] = window.L.marker([s.live.lat, s.live.lng], { icon }).addTo(map.current)
+              .bindTooltip(tip, { direction: "top", offset: [0, -12] }).on("click", () => openRef.current(s.id));
+          }
+        });
+      }, [sites, c]);
+
+      return (
+        <div className={`relative overflow-hidden ${card}`}>
+          <div ref={el} style={{ height: 380, zIndex: 0 }} />
+          <div className="absolute bottom-3 left-3 flex gap-3 rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow" style={{ zIndex: 500 }}>
+            {Object.values(STATUS).map((s) => (
+              <span key={s.label} className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: s.hex }} /> {s.label}</span>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  OVERVIEW PAGE
+     * ------------------------------------------------------------------ */
+    function OverviewPage({ sites, onOpen }) {
+      const c = useCfg();
+      return (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold">Map Overview</h1>
+            <p className="text-sm text-slate-500">{sites.length} active site{sites.length > 1 ? "s" : ""}</p>
+          </div>
+          <SiteMap sites={sites} onOpen={onOpen} />
+          <div className="grid gap-3 md:grid-cols-2">
+            {sites.map((s) => {
+              const st = siteStatus(s, c);
+              return (
+                <button key={s.id} onClick={() => onOpen(s.id)} className={`${card} flex items-center gap-4 p-4 text-left transition hover:bg-orange-50`}>
+                  <span className="h-14 w-1.5 rounded-full" style={{ background: STATUS[st].hex }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold">{s.live?.name}</div>
+                    <div className="mt-0.5 flex items-center gap-1 text-sm text-slate-500">
+                      <Icon name="MapPin" size={13} /> {s.live?.type}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <StatusPill status={st} />
+                      <span className="text-xs font-medium text-slate-500">{(s.config?.schDetailed || []).filter((w) => workState(w) === "active").length} works ongoing</span>
+                    </div>
+                  </div>
+                  <Icon name="ChevronRight" size={18} className="text-orange-500" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  AREA DEEP-DIVE
+     * ------------------------------------------------------------------ */
+    function LevelChip({ kind, level, limit }) {
+      const iconName = kind === "noise" ? "Volume2" : "Wind";
+      return (
+        <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${LVL[level].cls}`}>
+          <Icon name={iconName} size={12} /> {LVL[level].label} · ≤{limit} {kind === "noise" ? "dB" : "µg/m³"}
+        </span>
+      );
+    }
+
+    function AreaPanel({ site, area: a, ev, onClose, onAction }) {
+      const c = useCfg();
+      const ck = check(site, a, c);
+      const mist = ck.mist;
+      const pre = a.pre; // fixed for the whole misting episode (captured when the pump turned on)
+      const cutPct = pre ? Math.round(((pre - a.pm25) / pre) * 100) : null;
+      const verdict = (bad) => (
+        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${bad ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}>
+          {bad ? "Breached" : "Within limit"}
+        </span>
+      );
+
+      return (
+        <div className={`${card} p-5`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-orange-500 text-lg font-bold text-white">{a.id}</span>
+              <div>
+                <h2 className="text-xl font-bold">Area {a.id}</h2>
+                <div className="mt-1"><StatusPill status={ck.status} /></div>
+              </div>
+            </div>
+            <button onClick={onClose} className="rounded-full p-2 hover:bg-orange-100" aria-label="Close">
+              <Icon name="X" size={20} />
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <section className="rounded-xl bg-orange-50 p-4">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+                <Icon name="HardHat" size={16} className="text-orange-500" /> Work Done / Current Activity
+              </div>
+              {ck.works.length ? ck.works.map((w) => {
+                const taskName = w.type === "Others" && w.customType ? w.customType : w.type;
+                return (
+                  <div key={w.id} className="mt-3">
+                    <div className="font-semibold">Active Work: {taskName}</div>
+                    <div className="mt-1.5 flex flex-wrap gap-2">
+                      <LevelChip kind="noise" level={w.noise} limit={c.levels[w.noise].noise} />
+                      <LevelChip kind="dust" level={w.dust} limit={c.levels[w.dust].dust} />
+                    </div>
+                  </div>
+                );
+              }) : <div className="mt-3 font-semibold">No active construction in this area – sensor readings are still live and may come from non-construction sources</div>}
+              <div className="mt-4 text-xs text-slate-500">
+                {ck.hasWork ? `Expected for this area: Noise ${LVL[ck.noiseLvl].label} ≤${ck.noiseLimit} dB · Dust ${LVL[ck.dustLvl].label} ≤${ck.dustLimit} µg/m³` : `Only the absolute ceilings apply: ${c.ceiling.noise} dB noise · ${c.ceiling.dust} µg/m³ PM2.5`}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-orange-100 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <Icon name="Wind" size={16} className="text-orange-500" /> Dust Breach
+                </h3>
+                {verdict(ck.dustBreach)}
+              </div>
+              <div className="text-4xl font-bold tabular-nums">{a.pm25}<span className="ml-1 text-sm font-normal text-slate-500">µg/m³ PM2.5</span></div>
+              <div className="text-sm text-slate-500">PM10: {a.pm10} µg/m³ · Expected {LVL[ck.dustLvl].label} ≤ {ck.dustLimit} µg/m³</div>
+              <div className="mt-4 rounded-lg bg-orange-50 p-3">
+                <div className="text-xs font-semibold uppercase text-slate-500">Automated Mitigation</div>
+                <div className="mt-1 flex items-center gap-2 font-medium">
+                  <span className={`h-2.5 w-2.5 rounded-full ${mist ? "animate-pulse bg-sky-500" : "bg-slate-400"}`} />
+                  Water Misting: {mist ? `Active (PM2.5 Threshold Target: ≤ ${ck.dustTarget} µg/m³)` : "Standby"}
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className="text-xs font-semibold uppercase text-slate-500">Post-Mitigation Impact</div>
+                {mist ? (
+                  <>
+                    {[["Before misting", pre, "bg-red-500"], ["Current", a.pm25, "bg-green-500"]].map(([l, v, col]) => {
+                      const base = Math.max(pre || 0, a.pm25, 1);
+                      return (
+                        <div key={l} className="mt-2">
+                          <div className="flex justify-between text-xs"><span>{l}</span><span className="tabular-nums">{v === null ? "Not captured" : `${v} µg/m³`}</span></div>
+                          <div className="mt-1 h-2.5 rounded-full bg-orange-50"><div className={`h-full rounded-full ${col}`} style={{ width: `${v === null ? 0 : Math.min(100, (v / base) * 100)}%` }} /></div>
+                        </div>
+                      );
+                    })}
+                    <div className={`mt-2 text-sm font-semibold ${cutPct !== null && cutPct < 0 ? "text-red-700" : "text-green-700"}`}>
+                      {cutPct === null ? "Reduction unavailable (no before-misting reading)" : (cutPct < 0 ? `Not working yet: PM2.5 is ${Math.abs(cutPct)}% higher than when misting started` : `Reduction: ${cutPct}% since misting started`)}
+                    </div>
+                    <div className="text-xs text-slate-500">Misting stops at ≤ {ck.dustTarget} µg/m³ (expected limit {ck.dustLimit}, minus {c.mistMargin}%)</div>
+                  </>
+                ) : <div className="mt-1 text-sm text-slate-500">No misting needed – within expected limits.</div>}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-orange-100 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <Icon name="Volume2" size={16} className="text-orange-500" /> Noise Breach
+                </h3>
+                {verdict(ck.noiseBreach)}
+              </div>
+              <div className={`text-4xl font-bold tabular-nums ${ck.noiseBreach ? "text-red-600" : ""}`}>{a.db}<span className="ml-1 text-sm font-normal text-slate-500">dB</span></div>
+              <div className="text-sm text-slate-500">{ck.hasWork ? `Limit for ${LVL[ck.noiseLvl].label} work: ${ck.noiseLimit} dB` : `No active construction · absolute ceiling ${ck.noiseLimit} dB`}</div>
+              <label className="mt-4 flex items-center gap-2 rounded-lg bg-orange-50 p-3 text-sm font-medium">
+                <input type="checkbox" checked={ck.noiseBreach} readOnly className="h-4 w-4 accent-orange-500" />
+                {ck.noiseBreach ? "Alert automatically dispatched to Site Manager" : "No alert required"}
+              </label>
+              <div className="mt-4">
+                <div className="text-xs font-semibold uppercase text-slate-500">Actions Taken</div>
+                <select value={ev?.action ?? ""} disabled={!ev} onChange={(e) => onAction(ev.id, e.target.value)} className={`${field} mt-1 disabled:opacity-50`}>
+                  <option value="">{ev ? "— No action recorded —" : "— No active noise breach —"}</option>
+                  {ACTIONS.map((x) => <option key={x}>{x}</option>)}
+                </select>
+                {ev && !ev.action && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-xs font-bold uppercase text-white">
+                    <Icon name="AlertTriangle" size={12} /> Action Taken: No · Pending Response
+                  </div>
+                )}
+                {ev?.action && <div className="mt-2 text-sm font-medium text-green-700">✓ {ev.action}</div>}
+              </div>
+            </section>
+          </div>
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  SITE DETAILS & SCHEDULE
+     * ------------------------------------------------------------------ */
+    const len = (w) => { const m = Math.max(1, Math.round((w.end - w.start) / 60000)); return m >= 60 ? `${(m / 60).toFixed(1).replace(".0", "")} h` : `${m} min`; };
+    const BAR = { light: "bg-orange-200 text-orange-900", moderate: "bg-orange-400 text-white", heavy: "bg-orange-600 text-white" };
+
+    function LvlTag({ level, limit, unit }) {
+      return (
+        <span className={`inline-block whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold ${LVL[level].cls}`}>
+          {LVL[level].label} <span className="font-normal opacity-80">≤{limit} {unit}</span>
+        </span>
+      );
+    }
+
+    function Gantt({ site, now, onOpen }) {
+      const H = 3600000, ws = site.config?.schDetailed || [];
+      const t0 = at(8), t1 = at(18);
+      const span = t1 - t0, pos = (t) => ((t - t0) / span) * 100;
+      const hr = (t) => { const h = new Date(t).getHours(); return `${h % 12 || 12}${h < 12 ? "am" : "pm"}`; };
+      const ticks = []; for (let t = t0; t <= t1; t += H) ticks.push(t);
+      const nowRatio = now >= t0 && now <= t1 ? (now - t0) / span : null;
+
+      return (
+        <div className="overflow-x-auto">
+          <div className="relative" style={{ minWidth: 560 }}>
+            <div className="flex">
+              <div className="w-16 shrink-0" />
+              <div className="relative h-6 flex-1">
+                {ticks.map((t) => <span key={t} className="absolute -translate-x-1/2 text-[11px] font-medium text-slate-400" style={{ left: `${pos(t)}%` }}>{hr(t)}</span>)}
+              </div>
+            </div>
+            {getAreas(site).map((a) => {
+              const ends = [];
+              const placed = ws.filter((w) => w.area === a.id).sort((x, y) => x.start - y.start).map((w) => {
+                let i = ends.findIndex((e) => e <= w.start); if (i < 0) i = ends.length; ends[i] = w.end; return [w, i];
+              });
+              return (
+                <div key={a.id} className="flex border-t border-orange-100">
+                  <div className="w-16 shrink-0 py-2.5 text-xs font-bold uppercase text-slate-500">Area {a.id}</div>
+                  <div className="relative flex-1" style={{ height: Math.max(1, ends.length) * 30 + 8 }}>
+                    {ticks.map((t) => <i key={t} className="absolute bottom-0 top-0 w-px bg-orange-50" style={{ left: `${pos(t)}%` }} />)}
+                    {placed.map(([w, i]) => {
+                      const taskName = w.type === "Others" && w.customType ? w.customType : w.type;
+                      return (
+                        <button key={w.id} onClick={() => onOpen(a.id)} title={`${taskName} · ${fmt(w.start)} – ${fmt(w.end)}`}
+                          className={`absolute truncate rounded-md px-2 text-left text-xs font-semibold ${BAR[maxLvl([w.noise, w.dust])]} ${workState(w, now) === "done" ? "opacity-50" : ""}`}
+                          style={{ left: `${pos(w.start)}%`, width: `${((w.end - w.start) / span) * 100}%`, top: 4 + i * 30, height: 26, lineHeight: "26px" }}>
+                          {taskName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            {nowRatio !== null && (
+              <div className="pointer-events-none absolute bottom-0 top-6" style={{ left: `calc(4rem + (100% - 4rem) * ${nowRatio})`, width: 2, background: "#dc2626" }}>
+                <span className="absolute -top-5 -translate-x-1/2 rounded bg-red-600 px-1.5 text-[10px] font-bold uppercase text-white" style={{ left: 1 }}>Now</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function Schedule({ site, onOpen }) {
+      const c = useCfg();
+      const now = clock();
+      const sorted = [...(site.config?.schDetailed || [])].sort((a, b) => a.start - b.start || a.area - b.area);
+      const live = sorted.filter((w) => workState(w, now) === "active").length;
+      const done = sorted.filter((w) => workState(w, now) === "done").length;
+      const weekly = site.config?.weeklyPlan || [];
+
+      return (
+        <div className="space-y-8">
+          <section>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-lg font-bold">
+                <Icon name="Clock" size={18} className="text-orange-500" /> Full Daily Work Schedule <span className="text-sm font-normal text-slate-500">8:00 AM – 6:00 PM</span>
+              </h2>
+              <div className="flex gap-2 text-xs font-semibold">
+                <span className="rounded-full bg-orange-500 px-2.5 py-1 text-white">{live} ongoing</span>
+                <span className="rounded-full bg-orange-100 px-2.5 py-1 text-orange-800">{sorted.length - live - done} upcoming</span>
+                <span className="rounded-full bg-stone-200 px-2.5 py-1 text-slate-600">{done} completed</span>
+              </div>
+            </div>
+
+            <div className={`${card} overflow-hidden`}>
+              <div className="p-4">
+                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                  <span className="font-semibold uppercase">Timeline by area</span>
+                  {LEVELS.map((l) => <span key={l} className="flex items-center gap-1.5"><i className={`inline-block h-2.5 w-4 rounded-sm ${BAR[l].split(" ")[0]}`} /> {LVL[l].label}</span>)}
+                  <span className="text-slate-400">· bar colour = heaviest expected level</span>
+                </div>
+                <Gantt site={site} now={now} onOpen={onOpen} />
+              </div>
+
+              {live > 1 && (
+                <div className="border-t border-orange-100 bg-orange-100 px-4 py-2 text-sm font-medium text-orange-900">
+                  {live} works are running at the same time. Each area is judged against its heaviest concurrent work.
+                </div>
+              )}
+
+              <div className="overflow-x-auto border-t border-orange-100">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-orange-50 text-xs uppercase text-orange-700">
+                    <tr>
+                      <th className="py-2.5 pl-4 pr-3">Time</th><th className="px-3">Work</th><th className="px-3">Area</th>
+                      <th className="px-3">Expected noise</th><th className="px-3">Expected dust</th><th className="px-3 pr-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-100">
+                    {sorted.map((w) => {
+                      const st = workState(w, now), a = getAreas(site).find((x) => x.id === w.area), ck = a ? check(site, a, c, now) : { noiseBreach: false, dustBreach: false };
+                      const taskName = w.type === "Others" && w.customType ? w.customType : w.type;
+                      const chips = [];
+                      
+                      if (ck.noiseBreach) chips.push(["red", `Noise breach · ${a?.db} dB`]);
+                      if (ck.dustBreach) chips.push(["amber", `Dust breach · ${a?.pm25}`]);
+                      if (st === "active" && !chips.length) chips.push(["green", "Within limits"]);
+                      
+                      return (
+                        <tr key={w.id} onClick={() => onOpen(w.area)}
+                          className={`cursor-pointer hover:bg-orange-50 ${st === "active" ? "bg-orange-50" : ""} ${st === "done" ? "opacity-60" : ""}`}>
+                          <td className="whitespace-nowrap py-3 pl-4 pr-3 font-mono font-semibold tabular-nums" style={st === "active" ? { boxShadow: "inset 4px 0 0 #f97316" } : undefined}>
+                            {fmt(w.start)} – {fmt(w.end)}
+                            <div className="font-sans text-xs font-normal text-slate-400">{len(w)}</div>
+                          </td>
+                          <td className="px-3 py-3 font-semibold">{taskName}</td>
+                          <td className="px-3 py-3"><span className="rounded-md bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">Area {w.area}</span></td>
+                          <td className="px-3 py-3"><LvlTag level={w.noise} limit={c.levels[w.noise].noise} unit="dB" /></td>
+                          <td className="px-3 py-3"><LvlTag level={w.dust} limit={c.levels[w.dust].dust} unit="µg/m³" /></td>
+                          <td className="px-3 py-3 pr-4">
+                            {st === "active" ? (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="flex items-center gap-1 rounded-full bg-orange-500 px-2 py-0.5 text-[11px] font-bold uppercase text-white"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Live</span>
+                                {chips.map(([k, t]) => <span key={t} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS[k].pill}`}>{t}</span>)}
+                              </div>
+                            ) : st === "done"
+                              ? <span className="flex items-center gap-1 text-xs font-semibold text-slate-500"><Icon name="CheckCircle2" size={14} /> Completed</span>
+                              : <span className="text-xs font-semibold uppercase text-orange-600">Upcoming</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          {weekly.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-lg font-bold">
+                  <Icon name="CalendarDays" size={18} className="text-orange-500" /> Monthly Project Plan
+                </h2>
+              </div>
+              <div className={`${card} overflow-hidden`}>
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-orange-50 text-xs uppercase text-orange-700">
+                    <tr><th className="py-2.5 pl-4 pr-3 w-1/3">Timeline Block</th><th className="px-3">Primary Task Focus</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-100">
+                    {weekly.map((w, i) => {
+                      const taskName = w.task === "Others" && w.customTask ? w.customTask : w.task;
+                      return (
+                        <tr key={i} className="hover:bg-orange-50">
+                          <td className="py-3 pl-4 pr-3 font-semibold">{w.week}</td>
+                          <td className="px-3 py-3">{taskName}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </div>
+      );
+    }
+
+    function SiteDetail({ site, sites, onSelect, events, onAction, onModeToggle, onPumpToggle }) {
+      const c = useCfg();
+      const [openId, setOpenId] = useState(null);
+      const panel = useRef(null);
+      useEffect(() => { if (openId) panel.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [openId]);
+      
+      const { n, d } = peakOf(site);
+      const cn = check(site, n, c), cd = check(site, d, c);
+      const activeWorks = getAreas(site).reduce((t, a) => t + check(site, a, c).works.length, 0);
+      const selected = getAreas(site).find((a) => a.id === openId);
+      const ev = selected && events.find((e) => e.siteId === site.id && e.area === selected.id && e.kind === "noise" && !e.end);
+
+      const mode = site.config?.mode || 'auto';
+      const pump = site.live?.pump || false;
+
+      return (
+        <div className="space-y-6">
+          {sites.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="text-xs font-semibold uppercase text-slate-500">Select site</span>
+              {sites.map((x) => (
+                <button key={x.id} onClick={() => onSelect(x.id)}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${x.id === site.id ? "border-orange-500 bg-orange-500 text-white" : "border-orange-200 bg-white text-slate-700 hover:bg-orange-50"}`}>
+                  <i className="h-2.5 w-2.5 rounded-full border border-white" style={{ background: STATUS[siteStatus(x, c)].hex }} /> {x.live?.name}
+                </button>
+              ))}
+            </div>
+          )}
+          
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+            <div>
+              <h1 className="text-2xl font-bold">{site.live?.name}</h1>
+              <div className="flex items-center gap-1 text-sm text-slate-500"><Icon name="MapPin" size={13} /> {site.live?.type}</div>
+            </div>
+            <StatusPill status={siteStatus(site, c)} />
+          </div>
+
+          {activeWorks === 0 && (
+            <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-100 p-4 text-sm text-orange-900">
+              <Icon name="Info" size={18} className="mt-0.5" />
+              <div>
+                <div className="font-semibold">No active construction right now</div>
+                <div>Noise and dust readings below are still live. High values can occur without construction (traffic, weather, nearby activity). Only the absolute ceilings ({c.ceiling.noise} dB · {c.ceiling.dust} µg/m³) apply.</div>
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-6">
+            <Meter iconName="Volume2" label="Noise" value={n.db} unit="dB" limit={cn.noiseLimit} sub="Peak across all floors" caption={`Source: Area ${n.id} · expected ${LVL[cn.noiseLvl].label}`} />
+            <Meter iconName="Wind" label="Dust PM2.5 / PM10" value={d.pm25} unit="µg/m³" limit={cd.dustCeiling} sub={`PM10: ${d.pm10} µg/m³`} caption={`Source: Area ${d.id} · expected ${LVL[cd.dustLvl].label}`} />
+          </div>
+
+
+          {/* ACTUATOR CONTROL MOVED BELOW METERS */}
+          <section className="mb-6">
+            <h2 className="mb-2 text-lg font-bold">Actuator Control (Mist Pump)</h2>
+            <div className={`${card} p-5 flex flex-wrap gap-4 items-center justify-between`}>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Mode</span>
+                  <div className="flex rounded-lg bg-orange-100 p-1">
+                    <button onClick={() => onModeToggle(site.id, 'auto')} className={`px-3 py-1.5 text-sm font-bold rounded-md transition ${mode === 'auto' ? 'bg-white shadow text-orange-700' : 'text-slate-500 hover:text-slate-700'}`}>Auto</button>
+                    <button onClick={() => onModeToggle(site.id, 'manual')} className={`px-3 py-1.5 text-sm font-bold rounded-md transition ${mode === 'manual' ? 'bg-white shadow text-orange-700' : 'text-slate-500 hover:text-slate-700'}`}>Manual</button>
+                  </div>
+                </div>
+                {mode === 'manual' && (
+                  <div className="flex items-center gap-3 border-l border-orange-200 pl-4">
+                    <span className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Pump Power</span>
+                    <button onClick={() => onPumpToggle(site.id, !pump)} className={`px-4 py-1.5 text-sm font-bold rounded-lg text-white shadow-sm transition ${pump ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}>
+                      {pump ? 'Turn OFF' : 'Turn ON'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="text-sm text-slate-500">
+                {mode === 'auto' 
+                  ? <span>Managed automatically by sensor thresholds. Currently: <strong className={pump ? 'text-sky-600' : 'text-slate-600'}>{pump ? 'ACTIVE' : 'STANDBY'}</strong></span>
+                  : <span>Manual override enabled. ESP32 will follow web commands. Current Status: <strong className={pump ? 'text-sky-600' : 'text-slate-600'}>{pump ? 'ACTIVE' : 'STANDBY'}</strong></span>
+                }
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-2 text-lg font-bold">Areas &amp; Zone Status</h2>
+            <div className={`${card} divide-y divide-orange-100 overflow-hidden`}>
+              {getAreas(site).map((a) => {
+                const ck = check(site, a, c), S = STATUS[ck.status], on = openId === a.id;
+                const sub = ck.noiseBreach ? `Noise breach · ${a.db} dB (limit ${ck.noiseLimit})` : ck.dustBreach ? `PM2.5 ${a.pm25} µg/m³ (limit ${ck.hasWork ? ck.dustLimit : ck.dustCeiling})` : ck.mist ? `Misting until PM2.5 ≤ ${ck.dustTarget} µg/m³` : "Within limits";
+                return (
+                  <Fragment key={a.id}>
+                    <button onClick={() => setOpenId(on ? null : a.id)} className={`flex w-full items-center gap-4 px-4 py-3.5 text-left hover:bg-orange-50 ${on ? "bg-orange-50" : ""}`}>
+                      <span className={`flex h-10 w-10 items-center justify-center rounded-full font-bold ${on ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-700"}`}>{a.id}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold">Area {a.id}</span>
+                        <span className="block truncate text-sm text-slate-500">{sub} · {ck.works.length} ongoing</span>
+                      </span>
+                      <Icon name={S.iconName} size={20} className={S.iconCls} />
+                      <span className="hidden sm:block"><StatusPill status={ck.status} /></span>
+                      <Icon name="ChevronRight" size={18} className={`text-orange-500 transition ${on ? "rotate-90" : ""}`} />
+                    </button>
+                    {on && (
+                      <div ref={panel} className="bg-orange-50 p-4">
+                        <AreaPanel site={site} area={a} ev={ev} onClose={() => setOpenId(null)} onAction={onAction} />
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </div>
+          </section>
+
+          <Schedule site={site} onOpen={setOpenId} />
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  AUDIT LOG & TIMELINE
+     * ------------------------------------------------------------------ */
+    const KIND = { noise: { label: "Noise breach", iconName: "Volume2", unit: "dB" }, dust: { label: "Dust breach", iconName: "Wind", unit: "µg/m³" } };
+    const dur = (ms) => { const m = Math.max(1, Math.round(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
+    const outcomeOf = (e) => (!e.end ? "In progress" : e.kind === "dust" ? "Controlled by misting" : e.action ? "Compliance restored" : "Cleared – no action logged");
+
+    function Timeline({ e, c }) {
+      const steps = [
+        [e.start, "Breach detected", `${e.peak} ${KIND[e.kind]?.unit || ""} vs limit ${e.limit}`, "done"],
+        e.kind === "noise"
+          ? [e.start, "Alert dispatched", "Sent automatically to Site Manager", "done"]
+          : [e.start, "Auto misting started", `Runs until PM2.5 ≤ ${Math.round(e.limit * (1 - c.mistMargin / 100))} µg/m³`, "done"],
+        ...(e.kind === "noise" ? [e.actionAt
+          ? [e.actionAt, "Action taken", e.action, "done"]
+          : [null, e.end ? "No action recorded" : "Awaiting manager action", "Pending response", e.end ? "skip" : "wait"]] : []),
+        e.end ? [e.end, "Resolved", outcomeOf(e), "done"] : [null, "Ongoing", `Ongoing for ${dur(clock() - e.start)}`, "wait"],
+      ];
+      return (
+        <div className="flex flex-wrap gap-3">
+          {steps.map(([t, title, sub, st], i) => (
+            <div key={i} className={`min-w-[170px] flex-1 rounded-lg border bg-white p-3 ${st === "wait" ? "border-red-200" : "border-orange-100"}`}>
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase text-slate-500">
+                <span className={`h-2 w-2 rounded-full ${st === "done" ? "bg-green-500" : st === "wait" ? "animate-pulse bg-red-500" : "bg-slate-300"}`} />
+                {t ? fmt(t) : "—"}
+              </div>
+              <div className="mt-1 text-sm font-semibold">{title}</div>
+              <div className="text-xs text-slate-500">{sub}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function IncidentLog({ events, sites }) {
+      const c = useCfg();
+      const [f, setF] = useState({ site: "all", kind: "all", status: "all" });
+      const [openId, setOpenId] = useState(null);
+      const nameOf = (id) => sites.find((s) => s.id === id)?.live?.name ?? id;
+      const rows = events
+        .filter((e) => (f.site === "all" || e.siteId === f.site) && (f.kind === "all" || e.kind === f.kind)
+          && (f.status === "all" || (f.status === "open" ? !e.end : !!e.end)))
+        .sort((a, b) => b.start - a.start);
+      const response = (e) => (e.kind === "dust" ? `Auto misting · until PM2.5 ≤ ${Math.round(e.limit * (1 - c.mistMargin / 100))}` : `Alert sent to Site Manager · ${e.action || "no action yet"}`);
+
+      const stats = [
+        ["Ongoing", events.filter((e) => !e.end).length, "text-orange-600", "Breaches still happening"],
+        ["Awaiting action", events.filter((e) => !e.end && e.kind === "noise" && !e.action).length, "text-red-600", "Open noise, no action logged"],
+        ["Noise breaches", events.filter((e) => e.kind === "noise").length, "text-slate-900", "All time"],
+        ["Dust breaches", events.filter((e) => e.kind === "dust").length, "text-slate-900", "All time"],
+      ];
+
+      const exportCsv = () => {
+        const head = ["ID", "Start", "End", "Site", "Area", "Type", "Peak", "Limit", "Expected level", "Response", "Outcome"];
+        const body = rows.map((e) => [e.id, new Date(e.start).toISOString(), e.end ? new Date(e.end).toISOString() : "", nameOf(e.siteId), e.area, KIND[e.kind]?.label || e.kind, e.peak, e.limit, e.level, response(e), outcomeOf(e)]);
+        const csv = [head, ...body].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        const link = document.createElement("a");
+        link.href = url; link.download = "buildwatch-incidents.csv"; link.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const sel = (k, opts) => (
+        <select value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} className="w-auto rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-orange-500">
+          {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      );
+
+      return (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold">Incident Audit Log</h1>
+              <p className="text-sm text-slate-500">Every threshold breach, the automated response and the action taken – opened and closed automatically.</p>
+            </div>
+            <button onClick={exportCsv} className={`${btn} flex items-center gap-2 py-2 text-sm`}>
+              <Icon name="Download" size={15} /> Export CSV
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {stats.map(([l, v, col, hint]) => (
+              <div key={l} className={`${card} p-4`}>
+                <div className="text-xs font-semibold uppercase text-slate-500">{l}</div>
+                <div className={`mt-1 text-3xl font-bold tabular-nums ${v && col !== "text-slate-900" ? col : ""}`}>{v}</div>
+                <div className="text-xs text-slate-500">{hint}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {sites.length > 1 && sel("site", [["all", "All sites"], ...sites.map((s) => [s.id, s.live?.name || s.id])])}
+            {sel("kind", [["all", "All types"], ["noise", "Noise"], ["dust", "Dust"]])}
+            {sel("status", [["all", "All statuses"], ["open", "Ongoing"], ["resolved", "Resolved"]])}
+            <span className="self-center text-sm text-slate-500">{rows.length} incident{rows.length === 1 ? "" : "s"}</span>
+          </div>
+
+          <div className={`${card} overflow-x-auto`}>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-orange-50 text-xs uppercase text-orange-700">
+                <tr>{["Incident", "Site · Area", "Type", "Reading vs limit", "Response", "Duration", "Status", ""].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-orange-100">
+                {rows.map((e) => {
+                  const K = KIND[e.kind] || { label: e.kind, iconName: "AlertCircle", unit: "" };
+                  const open = openId === e.id;
+                  return (
+                    <Fragment key={e.id}>
+                      <tr onClick={() => setOpenId(open ? null : e.id)} className="cursor-pointer align-top hover:bg-orange-50">
+                        <td className="px-4 py-3"><div className="font-mono font-semibold">{e.id}</div><div className="whitespace-nowrap text-xs text-slate-500">{new Date(e.start).toLocaleDateString("en-MY")} · {fmt(e.start)}</div></td>
+                        <td className="px-4 py-3"><div className="font-medium">{nameOf(e.siteId)}</div><div className="text-xs text-slate-500">Area {e.area}</div></td>
+                        <td className="px-4 py-3"><span className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium"><Icon name={K.iconName} size={14} className="text-orange-500" /> {K.label}</span></td>
+                        <td className="px-4 py-3"><div className="font-semibold tabular-nums">{e.peak} {K.unit}</div><div className="text-xs text-slate-500">limit {e.limit} · {LVL[e.level]?.label || e.level}</div></td>
+                        <td className="max-w-[220px] px-4 py-3">
+                          {response(e)}
+                          {e.kind === "noise" && !e.action && !e.end && <div className="mt-1 text-xs font-bold uppercase text-red-600">Pending response</div>}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 tabular-nums">{dur((e.end ?? clock()) - e.start)}</td>
+                        <td className="px-4 py-3">
+                          {e.end
+                            ? <div><span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-800">Resolved</span><div className="mt-1 text-xs text-slate-500">{outcomeOf(e)}</div></div>
+                            : <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-600" /> Ongoing</span>}
+                        </td>
+                        <td className="px-4 py-3"><Icon name="ChevronDown" size={16} className={`text-orange-500 transition ${open ? "rotate-180" : ""}`} /></td>
+                      </tr>
+                      {open && <tr className="bg-orange-50"><td colSpan={8} className="px-4 py-4"><Timeline e={e} c={c} /></td></tr>}
+                    </Fragment>
+                  );
+                })}
+                {!rows.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No incidents match these filters.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  CONFIG PAGE (THRESHOLDS)
+     * ------------------------------------------------------------------ */
+    function ConfigPage({ cfg, setCfg }) {
+      const [draft, setDraft] = useState(cfg);
+      const [saved, setSaved] = useState(false);
+      const [err, setErr] = useState("");
+      const key = JSON.stringify(cfg);
+      useEffect(() => { setDraft(cfg); }, [key]);
+      const dirty = JSON.stringify(draft) !== key;
+      const setLvl = (l, k, v) => setDraft({ ...draft, levels: { ...draft.levels, [l]: { ...draft.levels[l], [k]: v } } });
+      const setCeil = (k, v) => setDraft({ ...draft, ceiling: { ...draft.ceiling, [k]: v }, levels: { ...draft.levels, heavy: { ...draft.levels.heavy, [k]: v } } });
+
+      const save = () => {
+        const vals = [draft.mistMargin, draft.ceiling.noise, draft.ceiling.dust, draft.levels.light.noise, draft.levels.light.dust, draft.levels.moderate.noise, draft.levels.moderate.dust];
+        if (vals.some((v) => v === "" || !Number.isFinite(Number(v)))) return setErr("Fill in every value with a number.");
+        const n = normalizeCfg(draft);
+        if (!(n.levels.light.noise < n.levels.moderate.noise && n.levels.moderate.noise < n.ceiling.noise)) return setErr("Noise: Light < Moderate < Breach ceiling.");
+        if (!(n.levels.light.dust < n.levels.moderate.dust && n.levels.moderate.dust < n.ceiling.dust)) return setErr("Dust: Light < Moderate < Breach ceiling.");
+        if (n.mistMargin < 0 || n.mistMargin > 100) return setErr("Reduction below threshold must be 0–100%.");
+        setErr(""); setCfg(n); setSaved(true); setTimeout(() => setSaved(false), 3000);
+      };
+      const reset = () => {
+        if (!window.confirm("Reset all thresholds to their default values? This replaces the saved configuration.")) return;
+        setErr(""); setDraft(DEFAULT_CFG); setCfg(DEFAULT_CFG);
+      };
+      const num = (val, on) => <input type="number" value={val} onChange={(e) => on(e.target.value)} className={`${field} w-28`} />;
+      const sym = "text-slate-500 mx-2";
+      const badge = (l) => <span className={`rounded-md border px-2.5 py-1 text-xs font-bold ${LVL[l].cls}`}>{LVL[l].label}</span>;
+      const rowCell = (l, k) => {
+        const u = <span className="ml-1.5 text-xs text-slate-500">{k === "noise" ? "dB" : "µg/m³"}</span>;
+        if (l === "light") return <div className="flex items-center"><span className={sym}>≤</span>{num(draft.levels.light[k], (v) => setLvl("light", k, v))}{u}</div>;
+        if (l === "moderate") return <div className="flex items-center"><b>{draft.levels.light[k]}</b><span className={sym}>–</span>{num(draft.levels.moderate[k], (v) => setLvl("moderate", k, v))}{u}</div>;
+        return (
+          <div>
+            <div className="flex items-center"><span className={sym}>&gt;</span><b>{draft.levels.moderate[k]}</b>{u}</div>
+            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">Breach ceiling (above) {num(draft.ceiling[k], (v) => setCeil(k, v))}{u}</div>
+          </div>
+        );
+      };
+
+      return (
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-2xl font-bold">Threshold Configuration</h1>
+            <p className="text-sm text-slate-500">Administrator only. Each scheduled work is tagged Light, Moderate or Heavy. Going above the range of the active work counts as a breach; the breach ceiling applies at all times.</p>
+          </div>
+          <div className={`${card} space-y-6 p-5`}>
+            <h3 className="text-lg font-semibold text-orange-600">Expected ranges by work level</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="text-xs uppercase text-slate-500">
+                  <tr><th className="py-2 pr-4">Level</th><th className="pr-4">Noise range <span className="normal-case">(dB)</span></th><th>Dust PM2.5 range <span className="normal-case">(µg/m³)</span></th></tr>
+                </thead>
+                <tbody>
+                  {LEVELS.map((l) => (
+                    <tr key={l} className="border-t border-orange-100 align-top">
+                      <td className="py-3 pr-4">{badge(l)}</td>
+                      <td className="py-3 pr-4">{rowCell(l, "noise")}</td>
+                      <td className="py-3">{rowCell(l, "dust")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-500">Dust ranges are compared with the live PM2.5 reading. Going above the range of the active work counts as a breach; the breach ceiling applies at all times.</p>
+            <div>
+              <h3 className="text-lg font-semibold text-orange-600">Misting</h3>
+              <p className="mt-2 text-sm text-slate-500">Misting has no fixed duration. It starts when dust exceeds its threshold and keeps running until PM2.5 has dropped below the threshold by this margin.</p>
+              <label className="mt-3 block max-w-[260px] text-xs font-semibold uppercase text-slate-500">Reduction below threshold (%)
+                <input type="number" value={draft.mistMargin} onChange={(e) => setDraft({ ...draft, mistMargin: e.target.value })} className={`${field} mt-1 font-normal`} />
+              </label>
+            </div>
+            {err && <div className="text-sm font-medium text-red-600">{err}</div>}
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={save} disabled={!dirty} className={`${btn} disabled:opacity-50`}>Save changes</button>
+              <button onClick={reset} className="rounded-lg border border-orange-300 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50 transition">Reset to defaults</button>
+              {saved && <span className="text-sm font-bold text-green-600">✓ Saved</span>}
+              {dirty && !saved && <span className="text-xs text-slate-500">Unsaved changes</span>}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  SCHEDULE MANAGER (ADMIN)
+     * ------------------------------------------------------------------ */
+    function ScheduleManager({ sites, onSaveSiteConfig }) {
+      const [siteId, setSiteId] = useState(sites.length ? sites[0].id : "");
+      
+      const site = sites.find(s => s.id === siteId);
+      const [daily, setDaily] = useState([]);
+      const [weekly, setWeekly] = useState([]);
+      const [saved, setSaved] = useState(false);
+      
+      const loadedRef = useRef(null);
+      
+      useEffect(() => {
+        if (site && site.config && loadedRef.current !== siteId) {
+          setDaily([...(site.config.schDetailed || [])]);
+          setWeekly([...(site.config.weeklyPlan || [])]);
+          loadedRef.current = siteId;
+        }
+      }, [siteId, site]);
+
+      const handleSave = () => {
+        if (!site) return;
+        const newConfig = { ...site.config, schDetailed: daily, weeklyPlan: weekly };
+        onSaveSiteConfig(site.id, newConfig);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      };
+
+      const addDaily = () => setDaily([...daily, { id: `d_${Date.now()}`, area: 1, start: tm("09:00"), end: tm("17:00"), type: "Wall Hacking & Demolition", customType: "", noise: "heavy", dust: "heavy" }]);
+      const updateDaily = (idx, field, val) => {
+        const arr = [...daily];
+        if (field === 'startStr' || field === 'endStr') {
+          arr[idx][field === 'startStr' ? 'start' : 'end'] = tm(val);
+        } else {
+          arr[idx][field] = val;
+        }
+        setDaily(arr);
+      };
+      const removeDaily = (idx) => setDaily(daily.filter((_, i) => i !== idx));
+
+      const addWeekly = () => setWeekly([...weekly, { id: `w_${Date.now()}`, week: `Week ${weekly.length + 1}`, task: "HVAC Ducting & Piping", customTask: "" }]);
+      const updateWeekly = (idx, field, val) => { const arr = [...weekly]; arr[idx][field] = val; setWeekly(arr); };
+      const removeWeekly = (idx) => setWeekly(weekly.filter((_, i) => i !== idx));
+
+      return (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold">Manage Work Schedules</h1>
+              <p className="text-sm text-slate-500">Administrator only. Define daily granular tasks for telemetry thresholding, and the long-term monthly/weekly plan.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {saved && <span className="text-sm font-bold text-green-600">✓ Saved successfully</span>}
+              <button onClick={handleSave} className={btn}><Icon name="Save" size={16} className="inline mr-2" /> Publish to App</button>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-orange-100 border border-orange-200">
+            <span className="font-semibold uppercase text-xs text-orange-800">Editing Site:</span>
+            <select value={siteId} onChange={e => setSiteId(e.target.value)} className="rounded-lg border-orange-300 px-3 py-1.5 text-sm font-semibold outline-none focus:border-orange-500">
+              {sites.map(s => <option key={s.id} value={s.id}>{s.live?.name}</option>)}
+            </select>
+          </div>
+
+          {/* DAILY SCHEDULE BUILDER */}
+          <div className={`${card} p-5`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg">Full Daily Work Schedule</h3>
+              <button onClick={addDaily} className="text-sm font-bold text-orange-600 hover:text-orange-700 bg-orange-50 px-3 py-1.5 rounded-md">+ Add Block</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="p-3">Area</th><th className="p-3">Time</th><th className="p-3">Task Category</th>
+                    <th className="p-3">Expected Noise</th><th className="p-3">Expected Dust</th><th className="p-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {daily.map((w, idx) => (
+                    <tr key={w.id}>
+                      <td className="p-2"><input type="number" min="1" value={w.area} onChange={e => updateDaily(idx, 'area', parseInt(e.target.value))} className={`${field} w-16 text-center`} /></td>
+                      <td className="p-2">
+                        <div className="flex items-center gap-1">
+                          <input type="time" value={toTimeStr(w.start)} onChange={e => updateDaily(idx, 'startStr', e.target.value)} className={field} />
+                          <span className="text-slate-400">-</span>
+                          <input type="time" value={toTimeStr(w.end)} onChange={e => updateDaily(idx, 'endStr', e.target.value)} className={field} />
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <select value={w.type} onChange={e => updateDaily(idx, 'type', e.target.value)} className={`${field} mb-1`}>
+                          {TASK_OPTS.map(opt => <option key={opt}>{opt}</option>)}
+                        </select>
+                        {w.type === "Others" && <input type="text" placeholder="Specify..." value={w.customType || ""} onChange={e => updateDaily(idx, 'customType', e.target.value)} className={field} />}
+                      </td>
+                      <td className="p-2"><select value={w.noise} onChange={e => updateDaily(idx, 'noise', e.target.value)} className={field}>{LEVELS.map(l => <option key={l} value={l}>{LVL[l].label}</option>)}</select></td>
+                      <td className="p-2"><select value={w.dust} onChange={e => updateDaily(idx, 'dust', e.target.value)} className={field}>{LEVELS.map(l => <option key={l} value={l}>{LVL[l].label}</option>)}</select></td>
+                      <td className="p-2 text-right"><button onClick={() => removeDaily(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Icon name="Trash2" size={16}/></button></td>
+                    </tr>
+                  ))}
+                  {daily.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-500">No daily tasks scheduled.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* MONTHLY PLAN BUILDER */}
+          <div className={`${card} p-5`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg">Monthly Project Plan</h3>
+              <button onClick={addWeekly} className="text-sm font-bold text-orange-600 hover:text-orange-700 bg-orange-50 px-3 py-1.5 rounded-md">+ Add Block</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr><th className="p-3 w-1/3">Timeline Block (e.g., Week 1, Oct 1-7)</th><th className="p-3">Primary Task Focus</th><th className="p-3"></th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {weekly.map((w, idx) => (
+                    <tr key={w.id}>
+                      <td className="p-2"><input type="text" value={w.week} onChange={e => updateWeekly(idx, 'week', e.target.value)} placeholder="Week 1" className={field} /></td>
+                      <td className="p-2">
+                        <select value={w.task} onChange={e => updateWeekly(idx, 'task', e.target.value)} className={`${field} mb-1`}>
+                          {TASK_OPTS.map(opt => <option key={opt}>{opt}</option>)}
+                        </select>
+                        {w.task === "Others" && <input type="text" placeholder="Specify custom task..." value={w.customTask || ""} onChange={e => updateWeekly(idx, 'customTask', e.target.value)} className={field} />}
+                      </td>
+                      <td className="p-2 text-right"><button onClick={() => removeWeekly(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Icon name="Trash2" size={16}/></button></td>
+                    </tr>
+                  ))}
+                  {weekly.length === 0 && <tr><td colSpan={3} className="p-4 text-center text-slate-500">No weekly plan scheduled.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+        </div>
+      );
+    }
+
+    /* ------------------------------------------------------------------ *
+     *  APP SHELL & FIREBASE SYNC LOGIC
+     * ------------------------------------------------------------------ */
+    function App() {
+      const [isLoaded, setIsLoaded] = useState(false);
+      const [session, setSession] = useState(null);
+      const [view, setView] = useState({ page: "overview", siteId: null });
+      const [sites, setSites] = useState([]);
+      const [events, setEvents] = useState([]);
+      const [cfg, setCfg] = useState(DEFAULT_CFG);
+
+      const sitesRef = useRef(sites);
+      const eventsRef = useRef(events);
+      const cfgRef = useRef(cfg);
+
+      useEffect(() => { sitesRef.current = sites; }, [sites]);
+      useEffect(() => { eventsRef.current = events; }, [events]);
+      useEffect(() => { cfgRef.current = cfg; }, [cfg]);
+
+      const mistRef = useRef({});     // siteId -> { pre } for the current misting episode
+      const seenRef = useRef({});     // siteId -> pump state at last snapshot
+      const pendingRef = useRef({});  // siteId_area -> time an incident write was sent
+
+      const prepare = (k, raw, idx) => {
+        const obj = { id: k, ...raw, live: { ...(raw.live || {}) }, config: { ...(raw.config || {}) } };
+        // Keep valid coordinates from Firebase; only fall back when they are missing/invalid.
+        const lat = Number(obj.live.lat), lng = Number(obj.live.lng);
+        const valid = okNum(obj.live.lat) && okNum(obj.live.lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+        if (!valid) { const f = FALLBACK_COORDS[k] || [CENTER[0] - 0.001 * idx, CENTER[1] + 0.001 * idx]; obj.live.lat = f[0]; obj.live.lng = f[1]; }
+        if (!obj.live.name) obj.live.name = k;
+        obj.config.schDetailed = normSchedule(k, obj.config.schDetailed);
+        // Before-misting reading: captured once when the pump turns on, then held until it turns off.
+        const dust = Number(obj.live.dust) || 0, on = !!obj.live.pump, ep = mistRef.current[k];
+        if (on && !ep) {
+          const stored = okNum(obj.live.preMist) && Number(obj.live.preMist) > 0 ? Number(obj.live.preMist) : null;
+          mistRef.current[k] = { pre: stored !== null ? stored : dust > 0 ? dust : null };
+        } else if (!on && ep) delete mistRef.current[k];
+        seenRef.current[k] = on;
+        obj.pre = mistRef.current[k]?.pre ?? null;
+        return obj;
+      };
+      const buildSites = (data) => Object.keys(data || {}).filter((k) => data[k] && typeof data[k] === "object").map((k, i) => prepare(k, data[k], i));
+
+      useEffect(() => {
+        let done = false;
+        const useDemo = () => { if (!sitesRef.current.length) setSites(buildSites(DEMO_SITES)); };
+        const finish = () => { if (!done) { done = true; setIsLoaded(true); } };
+        const timer = setTimeout(() => { useDemo(); finish(); }, 5000); // Firebase slow/unreachable -> demo data
+        let wired = false;
+
+        const setup = () => {
+          if (wired || !window.FirebaseAPI) return;
+          wired = true;
+          const { db, ref, onValue } = window.FirebaseAPI;
+
+          onValue(ref(db, 'buildwatch/sites'), (s) => {
+            if (s.exists() && s.val() && typeof s.val() === "object") setSites(buildSites(s.val()));
+            else useDemo();
+            finish();
+          }, () => { useDemo(); finish(); });
+          onValue(ref(db, 'buildwatch/events'), (s) => {
+            const data = s.exists() ? s.val() : null;
+            setEvents(data && typeof data === "object" ? Object.keys(data).filter((k) => data[k] && typeof data[k] === "object").map(k => ({ id: k, ...data[k] })) : []);
+          });
+          onValue(ref(db, 'buildwatch/cfg'), (s) => { setCfg(normalizeCfg(s.exists() ? s.val() : null)); });
+        };
+
+        if (window.FirebaseAPI) setup();
+        window.addEventListener('firebase-ready', setup);
+        return () => { clearTimeout(timer); window.removeEventListener('firebase-ready', setup); };
+      }, []);
+
+      // Dust incidents (admin session only, so several open consoles do not each log the same breach).
+      useEffect(() => {
+        if (!window.FirebaseAPI || session?.role !== "admin" || !sites.length) return;
+        const now = clock(), writes = {};
+        sites.forEach((s) => getAreas(s).forEach((a) => {
+          const ck = check(s, a, cfg, now), pk = `${s.id}_${a.id}`;
+          const anyOpen = events.find((e) => e.kind === "dust" && e.siteId === s.id && e.area === a.id && !e.end);
+          if (anyOpen) delete pendingRef.current[pk];
+          if (ck.dustBreach && !anyOpen) {
+            if (Date.now() - (pendingRef.current[pk] || 0) < 8000) return;   // write already in flight
+            pendingRef.current[pk] = Date.now();
+            const id = `D-${now.toString(36).toUpperCase()}-${s.id.slice(-1).toUpperCase()}${a.id}`;
+            writes[`buildwatch/events/${id}`] = { id, siteId: s.id, area: a.id, kind: "dust", basis: "pm25", start: now, peak: a.pm25, limit: ck.dustLimit, level: ck.dustLvl };
+          } else if (anyOpen && (anyOpen.basis === "pm25" || anyOpen.basis === "spike")) {
+            if (!ck.dustBreach) writes[`buildwatch/events/${anyOpen.id}/end`] = now;
+            else if (a.pm25 > (Number(anyOpen.peak) || 0)) writes[`buildwatch/events/${anyOpen.id}/peak`] = a.pm25;
+          }
+        }));
+        if (Object.keys(writes).length) { const { db, ref, update } = window.FirebaseAPI; update(ref(db), writes).catch((e) => console.error("Incident write failed:", e)); }
+      }, [sites, events, cfg, session]);
+
+      const isAdmin = session?.role === "admin";
+      const visible = useMemo(() => (isAdmin ? sites : sites.filter((s) => s.id === session?.siteId)), [isAdmin, sites, session]);
+      const visibleEvents = events.filter((e) => visible.some((s) => s.id === e.siteId));
+
+      const go = (page, siteId = null) => setView({ page, siteId });
+      const login = (s) => { setSession(s); go("overview"); };
+
+      const setAction = (eventId, action) => {
+        if (!window.FirebaseAPI) return;
+        const nextEvents = events.map((e) => (e.id === eventId ? { ...e, action, actionAt: action ? clock() : null } : e));
+        const eventsObj = nextEvents.reduce((acc, e) => ({...acc, [e.id]: e}), {});
+        window.FirebaseAPI.set(window.FirebaseAPI.ref(window.FirebaseAPI.db, 'buildwatch/events'), eventsObj);
+      };
+
+      const handleSetCfg = (newCfg) => {
+        const n = normalizeCfg(newCfg);
+        setCfg(n);
+        if (!window.FirebaseAPI) return;
+        window.FirebaseAPI.set(window.FirebaseAPI.ref(window.FirebaseAPI.db, 'buildwatch/cfg'), n);
+      };
+      
+      const handleSaveSiteConfig = (siteId, newConfig) => {
+        if (!window.FirebaseAPI) return;
+        window.FirebaseAPI.set(window.FirebaseAPI.ref(window.FirebaseAPI.db, `buildwatch/sites/${siteId}/config`), newConfig);
+      };
+
+      const handleModeToggle = (siteId, mode) => {
+        if (!window.FirebaseAPI) return;
+        window.FirebaseAPI.set(window.FirebaseAPI.ref(window.FirebaseAPI.db, `buildwatch/sites/${siteId}/config/mode`), mode);
+      };
+
+      const handlePumpToggle = (siteId, state) => {
+        if (!window.FirebaseAPI) return;
+        window.FirebaseAPI.set(window.FirebaseAPI.ref(window.FirebaseAPI.db, `buildwatch/sites/${siteId}/live/pump`), state);
+      };
+
+      if (!isLoaded) {
+        return (
+          <div className="flex min-h-screen items-center justify-center bg-orange-50 text-sm font-semibold uppercase tracking-wider text-orange-600">
+            <Icon name="Database" className="mr-2 animate-pulse" /> Connecting to Firebase...
+          </div>
+        );
+      }
+
+      if (!session) return <LoginPage sites={sites} onLogin={login} />;
+
+      const current = visible.find((s) => s.id === view.siteId);
+      const nav = [
+        ["overview", "Overview", "LayoutDashboard"],
+        ["site", "Site Details", "Building2"],
+        ["log", "Incident Audit Log", "ClipboardList"],
+        ...(isAdmin ? [
+          ["schedule", "Manage Schedules", "CalendarDays"],
+          ["config", "Threshold Config", "SlidersHorizontal"]
+        ] : [])
+      ];
+
+      return (
+        <CfgCtx.Provider value={cfg}>
+          <div className="min-h-screen bg-orange-50 text-slate-900">
+            <header className="sticky top-0 border-b border-orange-100 bg-white" style={{ zIndex: 1000 }}>
+              <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3">
+                <div className="flex items-center gap-3 font-bold text-lg">
+                  <img src={LOGO_URL} alt="BuildWatch Logo" className="h-8 w-auto object-contain rounded-md shadow-sm" />
+                  BuildWatch
+                </div>
+                <nav className="flex flex-1 gap-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                  {nav.map(([k, label, iconName]) => {
+                    const on = view.page === k;
+                    return (
+                      <button 
+                        key={k} 
+                        onClick={() => (k === "site" ? go("site", view.siteId || visible[0]?.id) : go(k))} 
+                        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition ${on ? "bg-orange-500 text-white" : "text-slate-600 hover:bg-orange-50"}`}
+                      >
+                        <Icon name={iconName} size={15} /> <span className="hidden lg:inline">{label}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+                <span className="rounded-md bg-orange-100 px-2 py-1 text-xs font-bold uppercase text-orange-700 hidden sm:inline">{isAdmin ? "Administrator" : "Site Manager"}</span>
+                <button onClick={() => setSession(null)} className="flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-orange-600 transition">
+                  <Icon name="LogOut" size={16} /> Sign out
+                </button>
+              </div>
+            </header>
+
+            <main className="mx-auto max-w-6xl p-5">
+              {view.page === "site" && current ? <SiteDetail key={current.id} site={current} sites={visible} onSelect={(id) => go("site", id)} events={events} onAction={setAction} onModeToggle={handleModeToggle} onPumpToggle={handlePumpToggle} />
+                : view.page === "log" ? <IncidentLog events={visibleEvents} sites={sites} />
+                : view.page === "config" && isAdmin ? <ConfigPage cfg={cfg} setCfg={handleSetCfg} />
+                : view.page === "schedule" && isAdmin ? <ScheduleManager sites={sites} onSaveSiteConfig={handleSaveSiteConfig} />
+                : <OverviewPage sites={visible} onOpen={(id) => go("site", id)} />}
+            </main>
+          </div>
+        </CfgCtx.Provider>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+
+  <!-- FIREBASE INTEGRATION MODULE -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getDatabase, ref, get, set, update, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAK-e-uORTohnpfvFM0CERKos_4mq8E8rw",
+      authDomain: "buildwatch-6040a.firebaseapp.com",
+      databaseURL: "https://buildwatch-6040a-default-rtdb.firebaseio.com",
+      projectId: "buildwatch-6040a",
+      storageBucket: "buildwatch-6040a.firebasestorage.app",
+      messagingSenderId: "919361982067",
+      appId: "1:919361982067:web:7f5840906f47cdcb7d6406",
+      measurementId: "G-D7S6T81SVS"
+    };
+
+    try {
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+      window.FirebaseAPI = { db, ref, get, set, update, onValue };
+      window.dispatchEvent(new Event('firebase-ready'));
+    } catch (err) {
+      console.error("Firebase init failed:", err);
+    }
+  </script>
+</body>
+</html>
